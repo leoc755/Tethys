@@ -35,15 +35,13 @@
             this.buttonRefresh = new System.Windows.Forms.Button();
             this.textBox1 = new System.Windows.Forms.TextBox();
             this.buttonForward = new System.Windows.Forms.Button();
+            this.buttonCloseTab = new System.Windows.Forms.Button();
             this.tabControl1 = new WindowsFormsApp1.ThemedTabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.tabPage2 = new System.Windows.Forms.TabPage();
-            this.button1 = new System.Windows.Forms.Button();
-            this.buttonCloseTab = new System.Windows.Forms.Button();
             this.tableLayoutPanel1.SuspendLayout();
             this.tableLayoutPanel2.SuspendLayout();
             this.tabControl1.SuspendLayout();
-            this.tabPage1.SuspendLayout();
             this.SuspendLayout();
             // 
             // tableLayoutPanel1
@@ -133,6 +131,17 @@
             this.buttonForward.Text = "→";
             this.buttonForward.UseVisualStyleBackColor = false;
             // 
+            // buttonCloseTab
+            // 
+            this.buttonCloseTab.Anchor = System.Windows.Forms.AnchorStyles.None;
+            this.buttonCloseTab.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.buttonCloseTab.Location = new System.Drawing.Point(198, 3);
+            this.buttonCloseTab.Name = "buttonCloseTab";
+            this.buttonCloseTab.Size = new System.Drawing.Size(60, 22);
+            this.buttonCloseTab.TabIndex = 4;
+            this.buttonCloseTab.Text = "X";
+            this.buttonCloseTab.UseVisualStyleBackColor = true;
+            // 
             // tabControl1
             // 
             this.tabControl1.Controls.Add(this.tabPage1);
@@ -148,7 +157,6 @@
             // 
             // tabPage1
             // 
-            this.tabPage1.Controls.Add(this.button1);
             this.tabPage1.Location = new System.Drawing.Point(4, 30);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
@@ -167,26 +175,6 @@
             this.tabPage2.Text = "tabPage2";
             this.tabPage2.UseVisualStyleBackColor = true;
             // 
-            // button1
-            // 
-            this.button1.Location = new System.Drawing.Point(11, 11);
-            this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(75, 23);
-            this.button1.TabIndex = 0;
-            this.button1.Text = "button1";
-            this.button1.UseVisualStyleBackColor = true;
-            // 
-            // buttonCloseTab
-            // 
-            this.buttonCloseTab.Anchor = System.Windows.Forms.AnchorStyles.None;
-            this.buttonCloseTab.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.buttonCloseTab.Location = new System.Drawing.Point(198, 3);
-            this.buttonCloseTab.Name = "buttonCloseTab";
-            this.buttonCloseTab.Size = new System.Drawing.Size(60, 22);
-            this.buttonCloseTab.TabIndex = 4;
-            this.buttonCloseTab.Text = "X";
-            this.buttonCloseTab.UseVisualStyleBackColor = true;
-            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -201,7 +189,6 @@
             this.tableLayoutPanel2.ResumeLayout(false);
             this.tableLayoutPanel2.PerformLayout();
             this.tabControl1.ResumeLayout(false);
-            this.tabPage1.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -218,7 +205,6 @@
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
         private System.Windows.Forms.Button buttonCloseTab;
-        private System.Windows.Forms.Button button1;
     }
 }
 
