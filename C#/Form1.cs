@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Microsoft.Web.WebView2.WinForms;
+using Tethys.Luna;
 
 namespace WindowsFormsApp1
 {
@@ -19,18 +20,39 @@ namespace WindowsFormsApp1
         {
             InitializeComponent();
             Load += Form1_Load;
-            FormClosed += (s, e) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            FormClosed += (s, e) =>
+            {
+                SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+                foreach (TabPage p in tabControl1.TabPages)
+                {
+                    var lt = p.Tag as LunaTab;
+                    if (lt != null) lt.Dispose();
+                }
+                if (luna != null) luna.Dispose();
+            };
             textBox1.KeyDown += textBox1_KeyDown;
 
-            buttonBack.Click += (s, e) => { var w = Current; if (w != null && w.CanGoBack) w.GoBack(); };
-            buttonForward.Click += (s, e) => { var w = Current; if (w != null && w.CanGoForward) w.GoForward(); };
-            buttonRefresh.Click += (s, e) => { var w = Current; if (w != null && w.CoreWebView2 != null) w.Reload(); };
+            buttonBack.Click += (s, e) =>
+            {
+                var l = CurrentLuna; if (l != null) { if (l.CanGoBack) l.Back(); return; }
+                var w = Current; if (w != null && w.CanGoBack) w.GoBack();
+            };
+            buttonForward.Click += (s, e) =>
+            {
+                var l = CurrentLuna; if (l != null) { if (l.CanGoForward) l.Forward(); return; }
+                var w = Current; if (w != null && w.CanGoForward) w.GoForward();
+            };
+            buttonRefresh.Click += (s, e) =>
+            {
+                var l = CurrentLuna; if (l != null) { l.Refresh(); return; }
+                var w = Current; if (w != null && w.CoreWebView2 != null) w.Reload();
+            };
             buttonCloseTab.Click += (s, e) => CloseTab(tabControl1.SelectedIndex);
 
             foreach (Button b in new Button[] { buttonBack, buttonForward, buttonRefresh, buttonCloseTab })
             {
                 b.TabStop = false;
-                b.GotFocus += (s, e) => { var w = Current; if (w != null) w.Focus(); };
+                b.GotFocus += (s, e) => FocusCurrent();
             }
 
             tabControl1.TabPages.Clear();
@@ -47,6 +69,13 @@ namespace WindowsFormsApp1
 
             tabControl1.SelectedIndexChanged += (s, e) =>
             {
+                var lt = CurrentLuna;
+                if (lt != null)
+                {
+                    textBox1.Text = lt.Url;
+                    UpdateNavButtons();
+                    return;
+                }
                 var wv = Current;
                 if (wv == null || wv.CoreWebView2 == null) return;
                 textBox1.Text = wv.CoreWebView2.Source;
@@ -77,6 +106,65 @@ namespace WindowsFormsApp1
                 var p = tabControl1.SelectedTab;
                 return p == null ? null : p.Tag as WebView2;
             }
+        }
+
+        private LunaEngine luna;
+
+        private LunaTab CurrentLuna
+        {
+            get
+            {
+                var p = tabControl1.SelectedTab;
+                return p == null ? null : p.Tag as LunaTab;
+            }
+        }
+
+        private void FocusCurrent()
+        {
+            var lt = CurrentLuna;
+            if (lt != null) { lt.View.Focus(); return; }
+            var w = Current;
+            if (w != null) w.Focus();
+        }
+
+        // Opens a tab rendered by the Luna engine. url == null loads the Luna home page.
+        private void AddLunaTab(string url)
+        {
+            if (luna == null)
+            {
+                try
+                {
+                    luna = new LunaEngine();
+                    luna.SetShell("Tethys", "6.3");
+                }
+                catch (Exception ex)
+                {
+                    luna = null;
+                    MessageBox.Show(this, "Could not load luna.dll:\n" + ex.Message, "Luna",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+            }
+
+            var lt = new LunaTab(luna);
+            lt.View.Dock = DockStyle.Fill;
+            var page = new TabPage("New Tab") { Tag = lt };
+            page.Controls.Add(lt.View);
+
+            tabControl1.TabPages.Insert(tabControl1.TabPages.Count - 1, page);
+            tabControl1.SelectedTab = page;
+
+            lt.Navigated += () =>
+            {
+                page.Text = lt.TabTitle;
+                if (lt == CurrentLuna)
+                {
+                    textBox1.Text = lt.Url;
+                    UpdateNavButtons();
+                }
+            };
+
+            lt.Load(url ?? luna.HomeUrl);
         }
 
         private async void AddTab(string url)
@@ -123,6 +211,8 @@ namespace WindowsFormsApp1
             tabControl1.TabPages.Remove(page);
             var wv = page.Tag as WebView2;
             if (wv != null) wv.Dispose();
+            var lt = page.Tag as LunaTab;
+            if (lt != null) lt.Dispose();
             page.Dispose();
         }
 
@@ -132,11 +222,24 @@ namespace WindowsFormsApp1
             if (e.KeyCode != Keys.Enter) return;
             e.SuppressKeyPress = true;
 
-            var wv = Current;
-            if (wv == null || wv.CoreWebView2 == null) return;
-
             string input = textBox1.Text.Trim();
             if (input.Length == 0) return;
+
+            // "luna:example.com" opens (or loads) a page with the Luna engine; "luna:" alone loads the Luna home page
+            bool wantLuna = input.StartsWith("luna:", StringComparison.OrdinalIgnoreCase);
+            if (wantLuna) input = input.Substring(5).Trim();
+
+            var lt = CurrentLuna;
+            if (wantLuna || lt != null)
+            {
+                string target = input.Length == 0 ? null : ResolveInput(input);
+                if (lt != null) lt.Load(target ?? luna.HomeUrl);
+                else AddLunaTab(target);
+                return;
+            }
+
+            var wv = Current;
+            if (wv == null || wv.CoreWebView2 == null) return;
 
             wv.CoreWebView2.Navigate(ResolveInput(input));
         }
@@ -201,7 +304,7 @@ namespace WindowsFormsApp1
 
             ColorControls(this, back, fore, box, border, hover, pressed);
 
-            if (Current != null && Current.CoreWebView2 != null)
+            if (CurrentLuna != null || (Current != null && Current.CoreWebView2 != null))
                 UpdateNavButtons();
 
             bool d = dark;
@@ -216,7 +319,7 @@ namespace WindowsFormsApp1
         private static void ColorControls(Control c, Color back, Color fore, Color box,
                                           Color border, Color hover, Color pressed)
         {
-            if (c is WebView2) return;
+            if (c is WebView2 || c is LunaView) return;
 
             if (c is ButtonBase)
             {
@@ -240,8 +343,12 @@ namespace WindowsFormsApp1
         }
         private void UpdateNavButtons()
         {
+            bool canBack, canFwd;
             var wv = Current;
-            if (wv == null) return;
+            var lt = CurrentLuna;
+            if (wv != null) { canBack = wv.CanGoBack; canFwd = wv.CanGoForward; }
+            else if (lt != null) { canBack = lt.CanGoBack; canFwd = lt.CanGoForward; }
+            else return;
 
             bool dark = IsDarkMode();
             Color fore = dark ? Color.White : SystemColors.ControlText;
@@ -250,8 +357,8 @@ namespace WindowsFormsApp1
             Color hover = dark ? Color.FromArgb(62, 62, 62) : Color.FromArgb(229, 241, 251);
             Color pressed = dark ? Color.FromArgb(80, 80, 80) : Color.FromArgb(204, 228, 247);
 
-            SetNavButton(buttonBack, wv.CanGoBack, fore, dim, box, hover, pressed);
-            SetNavButton(buttonForward, wv.CanGoForward, fore, dim, box, hover, pressed);
+            SetNavButton(buttonBack, canBack, fore, dim, box, hover, pressed);
+            SetNavButton(buttonForward, canFwd, fore, dim, box, hover, pressed);
         }
 
         private static void SetNavButton(Button b, bool active, Color fore, Color dim,
