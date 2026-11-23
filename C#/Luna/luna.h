@@ -29,7 +29,7 @@ extern "C" {
   #define LUNA_API __attribute__((visibility("default")))
 #endif
 
-#define LUNA_ENGINE_VERSION  "27.0.1"
+#define LUNA_ENGINE_VERSION  "27.1"
 #define LUNA_SHELL_VERSION   "27.2.4"
 #define LUNA_CSS_VERSION     "1.1"
 
@@ -48,14 +48,17 @@ typedef struct LunaPage   LunaPage;
 
 typedef struct LunaElement {
     const char* tag;      /* p h1..h6 li small span address a img video br hr */
-    const char* text;     /* decoded text, "" for br/hr/img/video */
+    const char* text;     /* decoded text; for img it is the alt text; "" for br/hr/video */
     const char* url;      /* a: raw href; img/video: absolute src; else "" */
     const char* id;
     const char* classes;  /* space separated */
+    const char* link;     /* href when the element is inside <a>, else "" (used for linked images) */
     int bold;
     int italic;
     int has_inline_style;
     int is_text;          /* 1 for text runs, 0 for br/hr/img/video */
+    int width;            /* img/video width attribute in pixels, 0 if not given */
+    int height;           /* img/video height attribute in pixels, 0 if not given */
 } LunaElement;
 
 typedef void (*LunaStatusCallback)(int loading, const char* url, void* user);
@@ -80,14 +83,18 @@ LUNA_API const char* luna_engine_user_agent(LunaEngine* e);
  * "Engine Alert" HTML snippet, like the Python engine. */
 LUNA_API char* luna_request(LunaEngine* e, const char* url, int ignore_security, char** final_url_out);
 
-/* Image bytes (1 second timeout), cached per URL inside the engine. Returns
- * NULL on failure. The pointer is owned by the engine. */
+/* Image bytes (5 second timeout per hop, redirects followed), cached per URL
+ * inside the engine. Returns NULL on failure. The pointer is owned by the engine.
+ * Call it from one thread at a time. */
 LUNA_API const unsigned char* luna_fetch_image(LunaEngine* e, const char* url, int* len_out);
 LUNA_API void luna_engine_clear_image_cache(LunaEngine* e);
 
 LUNA_API void luna_free(void* p);
 
 /* ---- page (BrowserTab + parse_and_format + Aurelius) ---- */
+/* luna_page_load also serves built-in pages: luna://about and luna://demohtml
+ * (unknown luna:// names give a Not Found page). They work offline and take part
+ * in history like any other page. */
 LUNA_API LunaPage*   luna_page_create(LunaEngine* e);
 LUNA_API void        luna_page_destroy(LunaPage* p);
 LUNA_API void        luna_page_set_status_callback(LunaPage* p, LunaStatusCallback cb, void* user);

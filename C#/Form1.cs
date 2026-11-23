@@ -135,7 +135,7 @@ namespace WindowsFormsApp1
                 try
                 {
                     luna = new LunaEngine();
-                    luna.SetShell("Tethys", "6.3");
+                    luna.SetShell("Tethys", "b7.1");
                 }
                 catch (Exception ex)
                 {
@@ -226,13 +226,15 @@ namespace WindowsFormsApp1
             if (input.Length == 0) return;
 
             // "luna:example.com" opens (or loads) a page with the Luna engine; "luna:" alone loads the Luna home page
+            // "luna://about" and "luna://demohtml" are built-in Luna pages and are passed through unchanged
             bool wantLuna = input.StartsWith("luna:", StringComparison.OrdinalIgnoreCase);
-            if (wantLuna) input = input.Substring(5).Trim();
+            bool builtin = input.StartsWith("luna://", StringComparison.OrdinalIgnoreCase);
+            if (wantLuna && !builtin) input = input.Substring(5).Trim();
 
             var lt = CurrentLuna;
             if (wantLuna || lt != null)
             {
-                string target = input.Length == 0 ? null : ResolveInput(input);
+                string target = builtin ? input : (input.Length == 0 ? null : ResolveInput(input));
                 if (lt != null) lt.Load(target ?? luna.HomeUrl);
                 else AddLunaTab(target);
                 return;

@@ -41,6 +41,17 @@ static std::vector<Attr> parse_attrs(const std::string& s) {
     return out;
 }
 
+/* "200", "200px" -> 200; "50%" or garbage -> 0 */
+static int parse_dim(const std::string* v) {
+    if (!v) return 0;
+    std::string s = trim(*v);
+    size_t i = 0; long n = 0;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') { n = n * 10 + (s[i] - '0'); if (n > 100000) n = 100000; ++i; }
+    if (i == 0) return 0;
+    if (i < s.size() && s[i] == '%') return 0;
+    return (int)n;
+}
+
 static const std::string* get_attr(const std::vector<Attr>& a, const char* name) {
     for (size_t i = 0; i < a.size(); ++i)
         if (a[i].name == name) return &a[i].value;
@@ -179,6 +190,7 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
     std::vector<std::string> curr_classes;
     bool is_bold = false, is_italic = false;
     PropMap inline_css;
+    int last_video = -1;
 
     for (size_t ti = 0; ti < toks.size(); ++ti) {
         if (!toks[ti].is_tag) {
@@ -220,13 +232,32 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
             Element el; el.tag = "br";
             elements.push_back(el);
         }
-        else if (tag_name == "img" || tag_name == "video") {
+        else if (tag_name == "img") {
             const std::string* src = get_attr(attrs, "src");
             if (src && !src->empty()) {
-                Element el; el.tag = tag_name; el.url = urljoin(base_url, *src); el.css = inline_css;
-                if (tag_name == "img") { el.id = curr_id; el.classes = curr_classes; }
+                Element el; el.tag = "img"; el.url = urljoin(base_url, *src); el.css = inline_css;
+                el.id = curr_id; el.classes = curr_classes; el.link = curr_url;
+                const std::string* alt = get_attr(attrs, "alt");
+                if (alt) el.text = decode_entities(*alt);
+                el.width = parse_dim(get_attr(attrs, "width"));
+                el.height = parse_dim(get_attr(attrs, "height"));
                 elements.push_back(el);
             }
+        }
+        else if (tag_name == "video") {
+            /* src may come from a <source> child; elements without any source are dropped at the end */
+            Element el; el.tag = "video"; el.css = inline_css; el.id = curr_id; el.classes = curr_classes;
+            const std::string* src = get_attr(attrs, "src");
+            if (src && !src->empty()) el.url = urljoin(base_url, *src);
+            el.width = parse_dim(get_attr(attrs, "width"));
+            el.height = parse_dim(get_attr(attrs, "height"));
+            elements.push_back(el);
+            last_video = (int)elements.size() - 1;
+        }
+        else if (tag_name == "source") {
+            const std::string* src = get_attr(attrs, "src");
+            if (last_video >= 0 && elements[(size_t)last_video].url.empty() && src && !src->empty())
+                elements[(size_t)last_video].url = urljoin(base_url, *src);
         }
         else if (tag_name == "a") {
             curr_tag = "a";
@@ -236,12 +267,22 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
         else if (is_text_tag(tag_name)) curr_tag = tag_name;
         else if (!tag_name.empty() && tag_name[0] == '/') {
             if (tag_name == "/a") curr_url.clear();
+            if (tag_name == "/video") last_video = -1;
             /* only reset to 'p' if we are not mid-inline sequence */
             if (tag_name != "/span") curr_tag = "p";
             curr_id.clear();
             curr_classes.clear();
         }
     }
+
+    /* drop videos that never got a source */
+    size_t w = 0;
+    for (size_t r = 0; r < elements.size(); ++r) {
+        if (elements[r].tag == "video" && elements[r].url.empty()) continue;
+        if (w != r) elements[w] = elements[r];
+        ++w;
+    }
+    elements.resize(w);
 }
 
 } // namespace luna

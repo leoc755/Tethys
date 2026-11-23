@@ -58,6 +58,11 @@
     <Reference Include="System">
       <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.dll</HintPath>
     </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="WindowsFormsIntegration" />
+    <Reference Include="System.Xaml" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -78,6 +83,9 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Luna.cs" />
+    <Compile Include="NyxPlayer.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="LunaView.cs">
       <SubType>Component</SubType>
     </Compile>

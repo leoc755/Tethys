@@ -26,8 +26,112 @@ struct LunaEngine {
     }
 
     std::string get_ua() const {
-        return "Mozilla/5.0 (" + os_info() + ") Nyxora/1.14 Nex/27.1.2 " + shell_name + "/" + shell_ver +
-               " (Luna, rv:" + version + ")";
+        std::string s = "Mozilla/5.0 (" + os_info() + ") Nyxora/1.14 Nex/27.1.2 ";
+        /* Callisto token goes before the shell token (skipped when the shell is Callisto itself) */
+        if (shell_name != "Callisto") s += "Callisto/" LUNA_SHELL_VERSION " ";
+        s += shell_name + "/" + shell_ver + " (Luna, rv:" + version + ")";
+        return s;
+    }
+
+    /* Built-in luna:// pages. name is lower case without slashes. */
+    bool builtin_page(const std::string& name, std::string& html) const {
+        if (name == "about") {
+            html =
+                "<title>About Luna</title>\n"
+                "<h1>Luna</h1>\n"
+                "<h3 style=\"color: #666666;\">Rendering engine of the Tethys browser</h3>\n"
+                "<hr>\n"
+                "<span><b>Engine:</b> Luna " + escape_html(version) + "</span><br>\n"
+                "<span><b>CSS engine:</b> Aurelius (Stellae " + escape_html(cssver) + ")</span><br>\n"
+                "<span><b>Shell:</b> " + escape_html(shell_name) + " " + escape_html(shell_ver) + "</span><br>\n"
+                "<span><b>Network:</b> WinHTTP, TLS 1.2 and 1.3, system certificate store</span><br>\n"
+                "<span><b>Origin:</b> ported from the Python Callisto 27.2.4 engine to C and C++</span><br>\n"
+                "<hr>\n"
+                "<span><b>User-Agent</b></span><br>\n"
+                "<p>" + escape_html(get_ua()) + "</p>\n"
+                "<hr>\n"
+                "<a href=\"luna://demohtml\">Open the demo page (luna://demohtml)</a><br>\n"
+                "<a href=\"" + escape_html(home_url) + "\">Open the home page</a>\n";
+            return true;
+        }
+        if (name == "demohtml") {
+            html = R"LUNA(<!DOCTYPE html>
+<html>
+<head>
+<title>Luna Demo</title>
+<style>
+body { background-color: #f4f4f8; }
+h1 { color: #223366; text-align: center; }
+h2, h3 { color: #36c; }
+address { color: #555555; }
+.ok { color: #008800; }
+.note { color: #aa6600; }
+.right { text-align: right; }
+#special { color: #cc0000; text-align: center; }
+</style>
+</head>
+<body>
+<h1>Luna Demo Page</h1>
+<p style="text-align: center;">Everything on this page is rendered by the Luna engine.</p>
+<hr>
+
+<h2>Headings (h2 and h3 are blue from a group selector)</h2>
+<h1>Heading 1</h1>
+<h2>Heading 2</h2>
+<h3>Heading 3</h3>
+<h4>Heading 4</h4>
+<h5>Heading 5</h5>
+<h6>Heading 6</h6>
+<hr>
+
+<h2>Text styles</h2>
+<span>This is</span> <b>bold</b> <span>and this is</span> <i>italic</i> <span>and this is</span> <b><i>both</i></b><br>
+<p>A paragraph is a block, so it starts on its own line.</p>
+<address>Address text is italic: Luna Engine, part of Tethys</address>
+<hr>
+
+<h2>CSS: class, id, inline and alignment</h2>
+<p class="ok">Class selector: green (.ok)</p>
+<p class="note">Class selector: orange (.note)</p>
+<p id="special">ID selector: red and centered (#special)</p>
+<p style="color:#36c;">Inline style with a short hex color (#36c becomes #3366cc)</p>
+<p style="color:#00f;" id="special">Inline beats id: this one is blue, centered by the id</p>
+<p class="right">Right aligned with .right</p>
+<hr>
+
+<h2>Lists</h2>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+<hr>
+
+<h2>Entities</h2>
+<p>&copy; &euro; &mdash; &lt;tag&gt; &amp; &#65; &#x42; &nbsp;(nbsp)</p>
+<hr>
+
+<h2>Links</h2>
+<a href="luna://about">About Luna (luna://about)</a><br>
+<a href="https://example.com/">example.com over HTTPS</a><br>
+<a href="http://neverssl.com/">neverssl.com over plain HTTP</a>
+<hr>
+
+<h2>Images</h2>
+<p>A PNG from a data: URI, scaled to 128 by 128 with the width and height attributes:</p>
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAFM0lEQVR42r3WkRYGKQBA4X2EgYWhPYNhGCyEYTgYhoPhYBgOhp1L4eBgGIZhj7G8v++ec/3T+8eff/39n/bH/wRsG/vGsSE25Iba0Btmw26cG27Db1wbYePeiBtp49nIG2Wjbrwb30bb6BtjY26sjX8DO/vOsSN25I7a0Ttmx+6cO27H71w7YefeiTtp59nJO2Wn7rw7307b6TtjZ+6s/Qc42A+OA3EgD9SBPjAH9uA8cAf+4DoIB/dBPEgHz0E+KAf14D34DtpBPxgH82AdP4BgFxwCIZACJdACI7CCU+AEXnAJguAWREESPIIsKIIqeAWfoAm6YAimYIkfQLJLDomQSImSaImRWMkpcRIvuSRBckuiJEkeSZYUSZW8kk/SJF0yJFOy5A+g2BWHQiikQim0wiis4lQ4hVdciqC4FVGRFI8iK4qiKl7Fp2iKrhiKqVjqB9DsmkMjNFKjNFpjNFZzapzGay5N0NyaqEmaR5M1RVM1r+bTNE3XDM3ULP0DGHbDYRAGaVAGbTAGazgNzuANlyEYbkM0JMNjyIZiqIbX8BmaoRuGYRqW+QEsu+WwCIu0KIu2GIu1nBZn8ZbLEiy3JVqS5bFkS7FUy2v5LM3SLcMyLcv+ACf7yXEiTuSJOtEn5sSenCfuxJ9cJ+HkPokn6eQ5ySflpJ68J99JO+kn42SerPMHcOyOwyEc0qEc2mEc1nE6nMM7Lkdw3I7oSI7HkR3FUR2v43M0R3cMx3Qs9wN4ds/hER7pUR7tMR7rOT3O4z2XJ3huT/Qkz+PJnuKpntfzeZqne4Znepb/AS72i+NCXMgLdaEvzIW9OC/chb+4LsLFfREv0sVzkS/KRb14L76LdtEvxsW8WNcPENgDR0AEZEAFdMAEbOAMuIAPXIEQuAMxkAJPIAdKoAbewBdogR4YgRlY4Qe42W+OG3Ejb9SNvjE39ua8cTf+5roJN/dNvEk3z02+KTf15r35btpNvxk382bdP0BkjxwREZERFdERE7GRM+IiPnJFQuSOxEiKPJEcKZEaeSNfpEV6ZERmZMUfILEnjoRIyIRK6IRJ2MSZcAmfuBIhcSdiIiWeRE6URE28iS/REj0xEjOx0g/wsD8cD+JBPqgH/WAe7MP54B78w/UQHu6H+JAenof8UB7qw/vwPbSH/jAe5sN6foDMnjkyIiMzKqMzJmMzZ8ZlfObKhMydiZmUeTI5UzI182a+TMv0zMjMzMo/QGEvHAVRkAVV0AVTsIWz4Aq+cBVC4S7EQio8hVwohVp4C1+hFXphFGZhlR+gsleOiqjIiqroiqnYyllxFV+5KqFyV2IlVZ5KrpRKrbyVr9IqvTIqs7LqD/Cyvxwv4kW+qBf9Yl7sy/niXvzL9RJe7pf4kl6el/xSXurL+/K9tJf+Ml7my3p/gI/94/gQH/JDfegP82E/zg/34T+uj/Bxf8SP9PF85I/yUT/ej++jffSP8TE/1vcDNPbG0RAN2VAN3TAN2zgbruEbVyM07kZspMbTyI3SqI238TVaozdGYzZW+wE6e+foiI7sqI7umI7tnB3X8Z2rEzp3J3ZS5+nkTunUztv5Oq3TO6MzO6v/AIN9cAzEQA7UQA/MwA7OgRv4wTUIg3sQB2nwDPKgDOrgHXyDNuiDMZiDNX6AyT45JmIiJ2qiJ2ZiJ+fETfzkmoTJPYmTNHkmeVImdfJOvkmb9MmYzMmaP8BiXxwLsZALtdALs7CLc+EWfnEtwuJexEVaPIu8KIu6eBffoi36YizmYi3+3/n97/oHng5njCsWWKQAAAAASUVORK5CYII=" width="128" height="128" alt="Generated test image">
+<p>The same image at its natural size, inside a link to luna://about:</p>
+<a href="luna://about"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAFM0lEQVR42r3WkRYGKQBA4X2EgYWhPYNhGCyEYTgYhoPhYBgOhp1L4eBgGIZhj7G8v++ec/3T+8eff/39n/bH/wRsG/vGsSE25Iba0Btmw26cG27Db1wbYePeiBtp49nIG2Wjbrwb30bb6BtjY26sjX8DO/vOsSN25I7a0Ttmx+6cO27H71w7YefeiTtp59nJO2Wn7rw7307b6TtjZ+6s/Qc42A+OA3EgD9SBPjAH9uA8cAf+4DoIB/dBPEgHz0E+KAf14D34DtpBPxgH82AdP4BgFxwCIZACJdACI7CCU+AEXnAJguAWREESPIIsKIIqeAWfoAm6YAimYIkfQLJLDomQSImSaImRWMkpcRIvuSRBckuiJEkeSZYUSZW8kk/SJF0yJFOy5A+g2BWHQiikQim0wiis4lQ4hVdciqC4FVGRFI8iK4qiKl7Fp2iKrhiKqVjqB9DsmkMjNFKjNFpjNFZzapzGay5N0NyaqEmaR5M1RVM1r+bTNE3XDM3ULP0DGHbDYRAGaVAGbTAGazgNzuANlyEYbkM0JMNjyIZiqIbX8BmaoRuGYRqW+QEsu+WwCIu0KIu2GIu1nBZn8ZbLEiy3JVqS5bFkS7FUy2v5LM3SLcMyLcv+ACf7yXEiTuSJOtEn5sSenCfuxJ9cJ+HkPokn6eQ5ySflpJ68J99JO+kn42SerPMHcOyOwyEc0qEc2mEc1nE6nMM7Lkdw3I7oSI7HkR3FUR2v43M0R3cMx3Qs9wN4ds/hER7pUR7tMR7rOT3O4z2XJ3huT/Qkz+PJnuKpntfzeZqne4Znepb/AS72i+NCXMgLdaEvzIW9OC/chb+4LsLFfREv0sVzkS/KRb14L76LdtEvxsW8WNcPENgDR0AEZEAFdMAEbOAMuIAPXIEQuAMxkAJPIAdKoAbewBdogR4YgRlY4Qe42W+OG3Ejb9SNvjE39ua8cTf+5roJN/dNvEk3z02+KTf15r35btpNvxk382bdP0BkjxwREZERFdERE7GRM+IiPnJFQuSOxEiKPJEcKZEaeSNfpEV6ZERmZMUfILEnjoRIyIRK6IRJ2MSZcAmfuBIhcSdiIiWeRE6URE28iS/REj0xEjOx0g/wsD8cD+JBPqgH/WAe7MP54B78w/UQHu6H+JAenof8UB7qw/vwPbSH/jAe5sN6foDMnjkyIiMzKqMzJmMzZ8ZlfObKhMydiZmUeTI5UzI182a+TMv0zMjMzMo/QGEvHAVRkAVV0AVTsIWz4Aq+cBVC4S7EQio8hVwohVp4C1+hFXphFGZhlR+gsleOiqjIiqroiqnYyllxFV+5KqFyV2IlVZ5KrpRKrbyVr9IqvTIqs7LqD/Cyvxwv4kW+qBf9Yl7sy/niXvzL9RJe7pf4kl6el/xSXurL+/K9tJf+Ml7my3p/gI/94/gQH/JDfegP82E/zg/34T+uj/Bxf8SP9PF85I/yUT/ej++jffSP8TE/1vcDNPbG0RAN2VAN3TAN2zgbruEbVyM07kZspMbTyI3SqI238TVaozdGYzZW+wE6e+foiI7sqI7umI7tnB3X8Z2rEzp3J3ZS5+nkTunUztv5Oq3TO6MzO6v/AIN9cAzEQA7UQA/MwA7OgRv4wTUIg3sQB2nwDPKgDOrgHXyDNuiDMZiDNX6AyT45JmIiJ2qiJ2ZiJ+fETfzkmoTJPYmTNHkmeVImdfJOvkmb9MmYzMmaP8BiXxwLsZALtdALs7CLc+EWfnEtwuJexEVaPIu8KIu6eBffoi36YizmYi3+3/n97/oHng5njCsWWKQAAAAASUVORK5CYII=" alt="Link image"></a>
+<p class="note">Images load in the background; a box with the alt text shows while loading or when loading fails.</p>
+<hr>
+
+<h2>Video</h2>
+<p>Played by the Windows media engine with the NyxPlayer controls. Needs an internet connection and an installed codec (MP4 with H.264 works on Windows 10).</p>
+<video width="480" height="270"><source src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
+</body>
+</html>
+)LUNA";
+            return true;
+        }
+        return false;
     }
 
     static bool is_redirect(int s) { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308; }
@@ -94,6 +198,24 @@ struct LunaPage {
         bool ignore_security = (flags & LUNA_LOAD_IGNORE_SECURITY) != 0;
 
         status(1, url);
+
+        /* built-in pages: luna://about, luna://demohtml */
+        if (starts_with(url, "luna://")) {
+            std::string name = lower(url.substr(7));
+            size_t cut = name.find_first_of("/?#");
+            if (cut != std::string::npos) name.erase(cut);
+            std::string html;
+            if (!eng->builtin_page(name, html))
+                html = "<title>Not Found</title>\n<h1>Not Found</h1>\n<p>There is no built-in page named "
+                       + escape_html(name) + ".</p>\n<a href=\"luna://about\">luna://about</a>\n";
+            std::string final_url = "luna://" + name;
+            if (save_history && !base_url.empty() && base_url != final_url) history.push_back(base_url);
+            if (clear_forward) forward_stack.clear();
+            apply_source(html, final_url);
+            status(0, "");
+            return LUNA_OK;
+        }
+
         if (!starts_with(url, "http://") && !starts_with(url, "https://")) url = "http://" + url;
 
         std::string final_url;
@@ -166,10 +288,10 @@ LUNA_API const unsigned char* luna_fetch_image(LunaEngine* e, const char* url_c,
     std::unordered_map<std::string, LunaEngine::Img>::iterator it = e->image_cache.find(url);
     if (it == e->image_cache.end()) {
         LunaEngine::Img img; img.ok = false;
-        /* follow redirects like the page loader, 1 second timeout per hop */
+        /* follow redirects like the page loader */
         std::string cur = url;
         for (int hop = 0; hop < 10; ++hop) {
-            HttpResult r = http_get(cur, e->get_ua(), false, 1000, 32u * 1024u * 1024u);
+            HttpResult r = http_get(cur, e->get_ua(), false, 5000, 32u * 1024u * 1024u);
             if (!r.ok) break;
             if (LunaEngine::is_redirect(r.status) && !r.location.empty()) { cur = urljoin(cur, r.location); continue; }
             if (r.status >= 200 && r.status < 300 && !r.body.empty()) {
@@ -253,9 +375,11 @@ LUNA_API int luna_page_element_get(LunaPage* p, int index, LunaElement* out) {
     out->url = el.url.c_str();
     out->id = el.id.c_str();
     out->classes = el.classes_joined.c_str();
+    out->link = el.link.c_str();
     out->bold = el.bold; out->italic = el.italic;
     out->has_inline_style = !el.css.empty();
     out->is_text = el.is_text;
+    out->width = el.width; out->height = el.height;
     return 1;
 }
 

@@ -19,8 +19,8 @@ namespace Tethys.Luna
         [StructLayout(LayoutKind.Sequential)]
         public struct Element
         {
-            public IntPtr tag, text, url, id, classes;
-            public int bold, italic, hasInlineStyle, isText;
+            public IntPtr tag, text, url, id, classes, link;
+            public int bold, italic, hasInlineStyle, isText, width, height;
         }
 
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_engine_create();
@@ -84,9 +84,10 @@ namespace Tethys.Luna
 
     public sealed class LunaElement
     {
-        public string Tag, Text, Url, Id;
+        public string Tag, Text, Url, Id, Link;   // Text is the alt text for img
         public string[] Classes;
         public bool Bold, Italic, HasInlineStyle, IsText;
+        public int Width, Height;                  // img/video width and height attributes, 0 = not given
         public bool IsLink { get { return Tag == "a" && Url.Length > 0; } }
     }
 
@@ -99,6 +100,7 @@ namespace Tethys.Luna
     public sealed class LunaEngine : IDisposable
     {
         internal IntPtr Handle;
+        internal readonly object Sync = new object();   // serialises image fetches and disposal
 
         public LunaEngine()
         {
@@ -138,18 +140,25 @@ namespace Tethys.Luna
             finally { Native.luna_free(body); Native.luna_free(fu); }
         }
 
-        /// <summary>Image bytes (cached inside the engine), or null.</summary>
+        /// <summary>Image bytes (cached inside the engine), or null. Safe to call from a worker thread; calls are serialised.</summary>
         public byte[] FetchImage(string url)
         {
-            int len;
-            IntPtr p = Native.luna_fetch_image(Handle, url, out len);
-            if (p == IntPtr.Zero || len <= 0) return null;
-            byte[] b = new byte[len];
-            Marshal.Copy(p, b, 0, len);
-            return b;
+            lock (Sync)
+            {
+                if (Handle == IntPtr.Zero) return null;
+                int len;
+                IntPtr p = Native.luna_fetch_image(Handle, url, out len);
+                if (p == IntPtr.Zero || len <= 0) return null;
+                byte[] b = new byte[len];
+                Marshal.Copy(p, b, 0, len);
+                return b;
+            }
         }
 
-        public void ClearImageCache() { Native.luna_engine_clear_image_cache(Handle); }
+        public void ClearImageCache()
+        {
+            lock (Sync) { if (Handle != IntPtr.Zero) Native.luna_engine_clear_image_cache(Handle); }
+        }
 
         public static TagInfo GetTagInfo(string tag)
         {
@@ -160,7 +169,10 @@ namespace Tethys.Luna
 
         public void Dispose()
         {
-            if (Handle != IntPtr.Zero) { Native.luna_engine_destroy(Handle); Handle = IntPtr.Zero; }
+            lock (Sync)
+            {
+                if (Handle != IntPtr.Zero) { Native.luna_engine_destroy(Handle); Handle = IntPtr.Zero; }
+            }
             GC.SuppressFinalize(this);
         }
         ~LunaEngine() { Dispose(); }
@@ -220,8 +232,10 @@ namespace Tethys.Luna
             return new LunaElement
             {
                 Tag = Native.Str(e.tag), Text = Native.Str(e.text), Url = Native.Str(e.url), Id = Native.Str(e.id),
+                Link = Native.Str(e.link),
                 Classes = cls.Length == 0 ? new string[0] : cls.Split(' '),
-                Bold = e.bold != 0, Italic = e.italic != 0, HasInlineStyle = e.hasInlineStyle != 0, IsText = e.isText != 0
+                Bold = e.bold != 0, Italic = e.italic != 0, HasInlineStyle = e.hasInlineStyle != 0, IsText = e.isText != 0,
+                Width = e.width, Height = e.height
             };
         }
 

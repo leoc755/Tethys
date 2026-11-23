@@ -46,11 +46,12 @@ private:
 
 /* ---- htmlparse.cpp ---- */
 struct Element {
-    std::string tag, text, url, id, classes_joined;
+    std::string tag, text, url, id, link, classes_joined;
     std::vector<std::string> classes;
     bool bold, italic, is_text;
     PropMap css;
-    Element() : bold(false), italic(false), is_text(false) {}
+    int width, height;   /* width/height attributes of img and video, 0 = not given */
+    Element() : bold(false), italic(false), is_text(false), width(0), height(0) {}
 };
 
 void parse_and_format(const std::string& raw_html, const std::string& base_url,
