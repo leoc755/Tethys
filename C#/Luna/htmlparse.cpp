@@ -52,6 +52,11 @@ static int parse_dim(const std::string* v) {
     return (int)n;
 }
 
+/* href/src values: trimmed and entity-decoded, so "?a=1&amp;b=2" becomes "?a=1&b=2" */
+static std::string attr_url(const std::string* v) {
+    return v ? decode_entities(trim(*v)) : std::string();
+}
+
 static const std::string* get_attr(const std::vector<Attr>& a, const char* name) {
     for (size_t i = 0; i < a.size(); ++i)
         if (a[i].name == name) return &a[i].value;
@@ -233,9 +238,9 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
             elements.push_back(el);
         }
         else if (tag_name == "img") {
-            const std::string* src = get_attr(attrs, "src");
-            if (src && !src->empty()) {
-                Element el; el.tag = "img"; el.url = urljoin(base_url, *src); el.css = inline_css;
+            std::string src = attr_url(get_attr(attrs, "src"));
+            if (!src.empty()) {
+                Element el; el.tag = "img"; el.url = urljoin(base_url, src); el.css = inline_css;
                 el.id = curr_id; el.classes = curr_classes; el.link = curr_url;
                 const std::string* alt = get_attr(attrs, "alt");
                 if (alt) el.text = decode_entities(*alt);
@@ -247,22 +252,21 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
         else if (tag_name == "video") {
             /* src may come from a <source> child; elements without any source are dropped at the end */
             Element el; el.tag = "video"; el.css = inline_css; el.id = curr_id; el.classes = curr_classes;
-            const std::string* src = get_attr(attrs, "src");
-            if (src && !src->empty()) el.url = urljoin(base_url, *src);
+            std::string src = attr_url(get_attr(attrs, "src"));
+            if (!src.empty()) el.url = urljoin(base_url, src);
             el.width = parse_dim(get_attr(attrs, "width"));
             el.height = parse_dim(get_attr(attrs, "height"));
             elements.push_back(el);
             last_video = (int)elements.size() - 1;
         }
         else if (tag_name == "source") {
-            const std::string* src = get_attr(attrs, "src");
-            if (last_video >= 0 && elements[(size_t)last_video].url.empty() && src && !src->empty())
-                elements[(size_t)last_video].url = urljoin(base_url, *src);
+            std::string src = attr_url(get_attr(attrs, "src"));
+            if (last_video >= 0 && elements[(size_t)last_video].url.empty() && !src.empty())
+                elements[(size_t)last_video].url = urljoin(base_url, src);
         }
         else if (tag_name == "a") {
             curr_tag = "a";
-            const std::string* href = get_attr(attrs, "href");
-            curr_url = (href && !href->empty()) ? *href : std::string();
+            curr_url = attr_url(get_attr(attrs, "href"));
         }
         else if (is_text_tag(tag_name)) curr_tag = tag_name;
         else if (!tag_name.empty() && tag_name[0] == '/') {

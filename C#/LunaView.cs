@@ -22,6 +22,7 @@ namespace WindowsFormsApp1
             public string Text;               // text run, or the alt text of an image
             public string Url;                // image or video source
             public string Link;               // href when clickable (text runs and linked images)
+            public string Id;                 // id attribute, for #fragment links
             public bool Block, Inline;
             public Font Font;
             public Color Color;
@@ -48,6 +49,7 @@ namespace WindowsFormsApp1
         private bool laying;
         private int lastWidth = -1;
         private Color bg = Color.White;
+        private string downLink;
 
         public event Action<string> LinkClicked;
 
@@ -164,10 +166,11 @@ namespace WindowsFormsApp1
                     Kind = 0,
                     Text = el.Text,
                     Link = el.IsLink ? el.Url : null,
+                    Id = el.Id,
                     Block = ti.IsBlock,
                     Inline = ti.IsInline,
                     Font = GetFont(ti.PointSize, fs),
-                    Color = Css(p.GetProp(i, "color"), el.Tag == "a" ? Color.Blue : Color.Black),
+                    Color = Css(p.GetProp(i, "color"), el.IsLink ? Color.Blue : Color.Black),
                     Align = align == "center" ? StringAlignment.Center :
                             align == "right" ? StringAlignment.Far : StringAlignment.Near
                 });
@@ -233,7 +236,7 @@ namespace WindowsFormsApp1
                             int avail = Math.Max(50, cw - PageMargin - x);
                             SizeF sz = g.MeasureString(b.Text, b.Font, avail, sf);
                             b.Rect = new RectangleF(x, y, avail, sz.Height + 2);
-                            if (b.IsLink) hits.Add(new KeyValuePair<RectangleF, string>(b.Rect, b.Link));
+                            if (b.IsLink) AddTextHits(g, sf, b);
                             if (b.Inline)
                             {
                                 x += (int)Math.Ceiling(sz.Width) + 4;
@@ -265,6 +268,39 @@ namespace WindowsFormsApp1
             if (AutoScrollMinSize != want) AutoScrollMinSize = want;
 
             foreach (Box b in boxes) if (b.Kind == 4) PlacePlayer(b);
+        }
+
+        // Hit areas follow the real text, line by line. A rectangle as wide as the layout box would also
+        // cover the links that follow on the same line, and the first link in the list would win every click.
+        private void AddTextHits(Graphics g, StringFormat sf, Box b)
+        {
+            int added = 0;
+            try
+            {
+                using (StringFormat mf = (StringFormat)sf.Clone())
+                {
+                    mf.SetMeasurableCharacterRanges(new CharacterRange[] { new CharacterRange(0, b.Text.Length) });
+                    Region[] regions = g.MeasureCharacterRanges(b.Text, b.Font, b.Rect, mf);
+                    try
+                    {
+                        if (regions.Length > 0)
+                        {
+                            using (Matrix m = new Matrix())
+                            {
+                                foreach (RectangleF r in regions[0].GetRegionScans(m))
+                                {
+                                    if (r.Width < 1 || r.Height < 1) continue;
+                                    hits.Add(new KeyValuePair<RectangleF, string>(r, b.Link));
+                                    added++;
+                                }
+                            }
+                        }
+                    }
+                    finally { foreach (Region r in regions) r.Dispose(); }
+                }
+            }
+            catch (Exception) { }
+            if (added == 0) hits.Add(new KeyValuePair<RectangleF, string>(b.Rect, b.Link));   // fallback: whole box
         }
 
         private Size ImageSize(Box b, int availW, Graphics g)
@@ -471,6 +507,7 @@ namespace WindowsFormsApp1
         {
             base.OnMouseDown(e);
             Focus();
+            downLink = e.Button == MouseButtons.Left ? FindLink(e.Location) : null;
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -484,7 +521,25 @@ namespace WindowsFormsApp1
             base.OnMouseUp(e);
             if (e.Button != MouseButtons.Left) return;
             string href = FindLink(e.Location);
-            if (href != null && LinkClicked != null) LinkClicked(href);
+            string pressed = downLink;
+            downLink = null;
+            if (href != null && href == pressed && LinkClicked != null) LinkClicked(href);   // not after a drag
+        }
+
+        /// <summary>#fragment links: scroll to the element with that id (or to the top for "" and "top").</summary>
+        public void ScrollToFragment(string fragment)
+        {
+            try { fragment = Uri.UnescapeDataString(fragment); } catch (Exception) { }
+            int y = -1;
+            if (fragment.Length > 0)
+            {
+                foreach (Box b in boxes)
+                    if (b.Kind == 0 && b.Id == fragment) { y = Math.Max(0, (int)b.Rect.Y - 10); break; }
+            }
+            if (y < 0 && (fragment.Length == 0 || fragment.Equals("top", StringComparison.OrdinalIgnoreCase))) y = 0;
+            if (y < 0) return;
+            AutoScrollPosition = new Point(0, y);
+            Invalidate();
         }
 
         protected override void Dispose(bool disposing)
@@ -504,6 +559,7 @@ namespace WindowsFormsApp1
         public readonly LunaView View;
         private readonly LunaPage page;
         private bool busy, disposeWanted;
+        private Func<int> pending;                // last navigation requested while a load was running
 
         // snapshot of page state, refreshed on the UI thread after each load
         public string Url { get; private set; }
@@ -520,7 +576,11 @@ namespace WindowsFormsApp1
             page = new LunaPage(engine);
             Url = "";
             TabTitle = "New Tab";
-            View.LinkClicked += href => Run(() => page.ClickLink(href));
+            View.LinkClicked += href =>
+            {
+                if (href.StartsWith("#")) { View.ScrollToFragment(href.Substring(1)); return; }   // same page, no reload
+                Run(() => page.ClickLink(href));
+            };
         }
 
         public void Load(string url) { Run(() => page.Load(url)); }
@@ -530,7 +590,8 @@ namespace WindowsFormsApp1
 
         private async void Run(Func<int> action)
         {
-            if (busy || disposeWanted) return;
+            if (disposeWanted) return;
+            if (busy) { pending = action; return; }      // the last click wins and runs when this load finishes
             busy = true;
             try { await Task.Run(action); }
             catch (Exception) { }
@@ -544,6 +605,10 @@ namespace WindowsFormsApp1
             CanGoForward = page.CanGoForward;
             View.SetPage(page);
             if (Navigated != null) Navigated();
+
+            Func<int> next = pending;
+            pending = null;
+            if (next != null) Run(next);
         }
 
         public void Dispose()

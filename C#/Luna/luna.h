@@ -29,7 +29,7 @@ extern "C" {
   #define LUNA_API __attribute__((visibility("default")))
 #endif
 
-#define LUNA_ENGINE_VERSION  "27.1"
+#define LUNA_ENGINE_VERSION  "27.1.1"
 #define LUNA_SHELL_VERSION   "27.2.4"
 #define LUNA_CSS_VERSION     "1.1"
 
@@ -42,6 +42,8 @@ extern "C" {
 /* luna_page_load return values */
 #define LUNA_OK               0
 #define LUNA_SECURITY_WARNING 1   /* the warning page is now loaded in the page */
+#define LUNA_CRASHED          2   /* internal error caught; a "Page Crashed" page is loaded */
+#define LUNA_DOWNLOAD         3   /* the URL was a file; it was saved and luna://downloads is loaded */
 
 typedef struct LunaEngine LunaEngine;
 typedef struct LunaPage   LunaPage;
@@ -76,6 +78,18 @@ LUNA_API const char* luna_engine_bookmark_name(LunaEngine* e, int i);
 LUNA_API const char* luna_engine_bookmark_url(LunaEngine* e, int i);
 LUNA_API const char* luna_engine_user_agent(LunaEngine* e);
 
+/* Settings are kept in a small ini file (default %APPDATA%\\Tethys\\luna.ini) and edited on
+ * luna://settings. Pass "" to keep settings for the session only. */
+LUNA_API void luna_engine_set_settings_path(LunaEngine* e, const char* path);
+
+/* Folder for luna://downloads (default %USERPROFILE%\\Downloads). */
+LUNA_API void luna_engine_set_download_dir(LunaEngine* e, const char* dir);
+
+/* Save bytes as a download (name from the Content-Disposition header or the URL; never overwrites).
+ * Returns 1 on success. The page loader calls this itself for non-HTML responses. */
+LUNA_API int luna_download_save(LunaEngine* e, const char* url, const unsigned char* data, int len,
+                                const char* content_type, const char* content_disposition);
+
 /* nexia_request: GET with manual redirects (max 20). Returns the body as a
  * malloc'ed string (free with luna_free); *final_url_out (optional) receives a
  * malloc'ed final URL. Returns "LUNA_SECURITY_ERROR" on TLS/certificate failure
@@ -92,9 +106,10 @@ LUNA_API void luna_engine_clear_image_cache(LunaEngine* e);
 LUNA_API void luna_free(void* p);
 
 /* ---- page (BrowserTab + parse_and_format + Aurelius) ---- */
-/* luna_page_load also serves built-in pages: luna://about and luna://demohtml
- * (unknown luna:// names give a Not Found page). They work offline and take part
- * in history like any other page. */
+/* luna_page_load also serves built-in pages: luna://about, settings, downloads, demohtml
+ * and crashtest (unknown luna:// names give a Not Found page). They work offline and take
+ * part in history like any other page. An internal C++ exception during a load is caught
+ * and shown as a "Page Crashed" page (LUNA_CRASHED). */
 LUNA_API LunaPage*   luna_page_create(LunaEngine* e);
 LUNA_API void        luna_page_destroy(LunaPage* p);
 LUNA_API void        luna_page_set_status_callback(LunaPage* p, LunaStatusCallback cb, void* user);

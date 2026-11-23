@@ -1,6 +1,8 @@
 /* Luna network core. Windows: WinHTTP (TLS 1.2/1.3 via the OS, system cert store).
  * Other platforms get a stub so the parser/CSS code can be built and tested anywhere. */
 #include "luna_internal.hpp"
+#include <cstdio>
+#include <cstdlib>
 
 #ifdef _WIN32
 
@@ -170,6 +172,15 @@ HttpResult http_get(const std::string& url_in, const std::string& user_agent,
                             loc, &lsz, WINHTTP_NO_HEADER_INDEX))
         r.location = trim(narrow(loc, lsz / sizeof(wchar_t)));
 
+    wchar_t hv[1024]; DWORD hsz = sizeof(hv);
+    if (WinHttpQueryHeaders(req.h, WINHTTP_QUERY_CONTENT_TYPE, WINHTTP_HEADER_NAME_BY_INDEX,
+                            hv, &hsz, WINHTTP_NO_HEADER_INDEX))
+        r.content_type = trim(narrow(hv, hsz / sizeof(wchar_t)));
+    hsz = sizeof(hv);
+    if (WinHttpQueryHeaders(req.h, WINHTTP_QUERY_CONTENT_DISPOSITION, WINHTTP_HEADER_NAME_BY_INDEX,
+                            hv, &hsz, WINHTTP_NO_HEADER_INDEX))
+        r.content_disposition = trim(narrow(hv, hsz / sizeof(wchar_t)));
+
     std::vector<char> buf;
     DWORD last_err = 0;
     for (;;) {
@@ -177,8 +188,8 @@ HttpResult http_get(const std::string& url_in, const std::string& user_agent,
         if (!WinHttpQueryDataAvailable(req.h, &avail)) { last_err = GetLastError(); break; }
         if (avail == 0) break;
         size_t old = buf.size();
-        if (old + avail > max_bytes) avail = (DWORD)(max_bytes > old ? max_bytes - old : 0);
-        if (avail == 0) break;
+        if (old >= max_bytes) { r.truncated = true; break; }
+        if (old + avail > max_bytes) avail = (DWORD)(max_bytes - old);
         buf.resize(old + avail);
         DWORD got = 0;
         if (!WinHttpReadData(req.h, &buf[old], avail, &got)) { last_err = GetLastError(); buf.resize(old); break; }
@@ -190,6 +201,56 @@ HttpResult http_get(const std::string& url_in, const std::string& user_agent,
     r.body.assign(buf.begin(), buf.end());
     r.ok = true;
     return r;
+}
+
+static std::string env_utf8(const wchar_t* name) {
+    DWORD n = GetEnvironmentVariableW(name, NULL, 0);
+    if (n == 0) return std::string();
+    std::wstring v((size_t)n, L'\0');
+    DWORD got = GetEnvironmentVariableW(name, &v[0], n);
+    return narrow(v.c_str(), got);
+}
+
+std::string default_settings_path() {
+    std::string a = env_utf8(L"APPDATA");
+    return a.empty() ? std::string() : a + "\\Tethys\\luna.ini";
+}
+
+std::string default_download_dir() {
+    std::string u = env_utf8(L"USERPROFILE");
+    return u.empty() ? std::string() : u + "\\Downloads";
+}
+
+char path_sep() { return '\\'; }
+
+bool make_dirs(const std::string& dir) {
+    std::wstring w = widen(dir);
+    if (w.empty()) return false;
+    for (size_t i = 1; i <= w.size(); ++i)
+        if (i == w.size() || w[i] == L'\\' || w[i] == L'/') CreateDirectoryW(w.substr(0, i).c_str(), NULL);
+    DWORD a = GetFileAttributesW(w.c_str());
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+bool file_exists(const std::string& path) {
+    return GetFileAttributesW(widen(path).c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+bool write_file(const std::string& path, const std::string& data) {
+    FILE* f = _wfopen(widen(path).c_str(), L"wb");
+    if (!f) return false;
+    bool ok = data.empty() || fwrite(data.data(), 1, data.size(), f) == data.size();
+    return (fclose(f) == 0) && ok;
+}
+
+bool read_file(const std::string& path, std::string& out) {
+    FILE* f = _wfopen(widen(path).c_str(), L"rb");
+    if (!f) return false;
+    char buf[4096]; size_t got;
+    out.clear();
+    while ((got = fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, got);
+    fclose(f);
+    return true;
 }
 
 std::string os_info() {
@@ -213,6 +274,9 @@ std::string os_info() {
 
 #else  /* !_WIN32 : stub */
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 namespace luna {
 
 HttpResult http_get(const std::string&, const std::string&, bool, int, size_t) {
@@ -223,6 +287,56 @@ HttpResult http_get(const std::string&, const std::string&, bool, int, size_t) {
 
 std::string os_info() { return "Windows NT 10.0 [UNK]; Win64; x64"; }
 
+std::string default_settings_path() { return std::string(); }
+
+std::string default_download_dir() {
+    const char* h = getenv("HOME");
+    return h ? std::string(h) + "/Downloads" : std::string();
+}
+
+char path_sep() { return '/'; }
+
+bool make_dirs(const std::string& dir) {
+    if (dir.empty()) return false;
+    for (size_t i = 1; i <= dir.size(); ++i)
+        if (i == dir.size() || dir[i] == '/') mkdir(dir.substr(0, i).c_str(), 0755);
+    struct stat st;
+    return stat(dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+bool file_exists(const std::string& path) {
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+}
+
+bool write_file(const std::string& path, const std::string& data) {
+    FILE* f = fopen(path.c_str(), "wb");
+    if (!f) return false;
+    bool ok = data.empty() || fwrite(data.data(), 1, data.size(), f) == data.size();
+    return (fclose(f) == 0) && ok;
+}
+
+bool read_file(const std::string& path, std::string& out) {
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+    char buf[4096]; size_t got;
+    out.clear();
+    while ((got = fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, got);
+    fclose(f);
+    return true;
+}
+
 } // namespace luna
 
 #endif
+
+namespace luna {
+
+std::string path_join(const std::string& dir, const std::string& name) {
+    if (dir.empty()) return name;
+    char last = dir[dir.size() - 1];
+    if (last == '/' || last == '\\') return dir + name;
+    return dir + path_sep() + name;
+}
+
+} // namespace luna

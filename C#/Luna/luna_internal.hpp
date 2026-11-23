@@ -21,6 +21,8 @@ std::string urljoin(const std::string& base, const std::string& ref);
 std::string sanitize_utf8(const std::string& in);
 std::string decode_entities(const std::string& in);
 std::string escape_html(const std::string& s);
+std::string url_decode(const std::string& s, bool plus_as_space);
+std::string escape_url(const std::string& u);   /* spaces, non-ASCII and unsafe bytes -> %XX; tabs/newlines dropped */
 
 /* ---- aurelius.cpp (Stellae 1.1) ---- */
 class Aurelius {
@@ -61,14 +63,28 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
 struct HttpResult {
     bool ok;
     bool security_error;
+    bool truncated;                 /* body was cut at max_bytes */
     int status;
-    std::string body, location, error;
-    HttpResult() : ok(false), security_error(false), status(0) {}
+    std::string body, location, error, content_type, content_disposition;
+    HttpResult() : ok(false), security_error(false), truncated(false), status(0) {}
 };
 
 HttpResult http_get(const std::string& url, const std::string& user_agent,
                     bool ignore_security, int timeout_ms, size_t max_bytes);
 std::string os_info();
+
+/* platform helpers (net.cpp); paths are UTF-8 */
+std::string default_settings_path();     /* %APPDATA%\\Tethys\\luna.ini, "" if unknown */
+std::string default_download_dir();      /* %USERPROFILE%\\Downloads */
+char path_sep();
+std::string path_join(const std::string& dir, const std::string& name);
+bool make_dirs(const std::string& dir);
+bool file_exists(const std::string& path);
+bool write_file(const std::string& path, const std::string& data);
+bool read_file(const std::string& path, std::string& out);
+
+/* pages.cpp */
+bool is_download(const std::string& content_type, const std::string& content_disposition);
 
 } // namespace luna
 

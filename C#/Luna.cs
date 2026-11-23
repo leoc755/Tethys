@@ -35,6 +35,10 @@ namespace Tethys.Luna
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_engine_bookmark_name(IntPtr e, int i);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_engine_bookmark_url(IntPtr e, int i);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_engine_user_agent(IntPtr e);
+        [DllImport(Dll, CallingConvention = CC)] public static extern void luna_engine_set_settings_path(IntPtr e,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+        [DllImport(Dll, CallingConvention = CC)] public static extern void luna_engine_set_download_dir(IntPtr e,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string dir);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_request(IntPtr e,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string url, int ignoreSecurity, out IntPtr finalUrl);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_fetch_image(IntPtr e,
@@ -88,7 +92,8 @@ namespace Tethys.Luna
         public string[] Classes;
         public bool Bold, Italic, HasInlineStyle, IsText;
         public int Width, Height;                  // img/video width and height attributes, 0 = not given
-        public bool IsLink { get { return Tag == "a" && Url.Length > 0; } }
+        // text inside <a href> keeps the link even when it sits in a span, heading or paragraph; img/video Url is their source, not a link
+        public bool IsLink { get { return IsText && Url.Length > 0; } }
     }
 
     public struct TagInfo
@@ -113,6 +118,12 @@ namespace Tethys.Luna
         public string CssVersion { get { return Native.Str(Native.luna_engine_css_version(Handle)); } }
         public string HomeUrl { get { return Native.Str(Native.luna_engine_home_url(Handle)); } }
         public string UserAgent { get { return Native.Str(Native.luna_engine_user_agent(Handle)); } }
+
+        /// <summary>Settings file for luna://settings (default %APPDATA%\Tethys\luna.ini). Pass "" to keep settings for the session only.</summary>
+        public void SetSettingsPath(string path) { Native.luna_engine_set_settings_path(Handle, path); }
+
+        /// <summary>Folder for luna://downloads (default %USERPROFILE%\Downloads).</summary>
+        public void SetDownloadDir(string dir) { Native.luna_engine_set_download_dir(Handle, dir); }
 
         /// <summary>Name and version used in the User-Agent (Callisto 27.2.4 by default).</summary>
         public void SetShell(string name, string version) { Native.luna_engine_set_shell(Handle, name, version); }
@@ -182,7 +193,7 @@ namespace Tethys.Luna
     public sealed class LunaPage : IDisposable
     {
         public const int SaveHistory = 1, ClearForward = 2, IgnoreSecurity = 4;
-        public const int Ok = 0, SecurityWarning = 1;
+        public const int Ok = 0, SecurityWarning = 1, Crashed = 2, Download = 3;
 
         IntPtr handle;
         Native.StatusCallback cb;   // keep a reference so the GC does not collect it

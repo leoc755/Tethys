@@ -1,161 +1,75 @@
 /* Luna engine + page logic and the C API (port of CelesteEngine and BrowserTab) */
-#include "luna.h"
-#include "luna_internal.hpp"
+#include "luna_engine.hpp"
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <new>
 
 using namespace luna;
 
-struct LunaEngine {
-    std::string version, shell_name, shell_ver, cssver, home_url, ua, scratch;
-    std::vector<std::pair<std::string, std::string> > bookmarks;
-    struct Img { bool ok; std::vector<unsigned char> data; };
-    std::unordered_map<std::string, Img> image_cache;
+/* ---------------------------------------------------------------- engine */
 
-    LunaEngine() {
-        version = LUNA_ENGINE_VERSION;
-        shell_name = "Callisto";
-        shell_ver = LUNA_SHELL_VERSION;
-        cssver = LUNA_CSS_VERSION;
-        home_url = "https://nxhp.pages.dev/";
-        bookmarks.push_back(std::make_pair("XAMPP", "http://192.168.12.154/"));
-        bookmarks.push_back(std::make_pair("Acid1", "https://www.w3.org/Style/CSS/Test/Acid1/test.html"));
-        bookmarks.push_back(std::make_pair("Acid2", "https://acid2.acidtests.org/"));
-        bookmarks.push_back(std::make_pair("Acid3", "http://acid3.acidtests.org/"));
-    }
+LunaEngine::LunaEngine() {
+    version = LUNA_ENGINE_VERSION;
+    shell_name = "Callisto";
+    shell_ver = LUNA_SHELL_VERSION;
+    cssver = LUNA_CSS_VERSION;
+    home_url = "https://nxhp.pages.dev/";
+    bookmarks.push_back(std::make_pair("XAMPP", "http://192.168.12.154/"));
+    bookmarks.push_back(std::make_pair("Acid1", "https://www.w3.org/Style/CSS/Test/Acid1/test.html"));
+    bookmarks.push_back(std::make_pair("Acid2", "https://acid2.acidtests.org/"));
+    bookmarks.push_back(std::make_pair("Acid3", "http://acid3.acidtests.org/"));
+    settings_path = default_settings_path();
+    download_dir = default_download_dir();
+    load_settings();
+}
 
-    std::string get_ua() const {
-        std::string s = "Mozilla/5.0 (" + os_info() + ") Nyxora/1.14 Nex/27.1.2 ";
-        /* Callisto token goes before the shell token (skipped when the shell is Callisto itself) */
-        if (shell_name != "Callisto") s += "Callisto/" LUNA_SHELL_VERSION " ";
-        s += shell_name + "/" + shell_ver + " (Luna, rv:" + version + ")";
-        return s;
-    }
+std::string LunaEngine::get_ua() const {
+    std::string s = "Mozilla/5.0 (" + os_info() + ") Nyxora/1.14 Nex/27.1.2 ";
+    /* Callisto token goes before the shell token (skipped when the shell is Callisto itself) */
+    if (shell_name != "Callisto") s += "Callisto/" LUNA_SHELL_VERSION " ";
+    s += shell_name + "/" + shell_ver + " (Luna, rv:" + version + ")";
+    return s;
+}
 
-    /* Built-in luna:// pages. name is lower case without slashes. */
-    bool builtin_page(const std::string& name, std::string& html) const {
-        if (name == "about") {
-            html =
-                "<title>About Luna</title>\n"
-                "<h1>Luna</h1>\n"
-                "<h3 style=\"color: #666666;\">Rendering engine of the Tethys browser</h3>\n"
-                "<hr>\n"
-                "<span><b>Engine:</b> Luna " + escape_html(version) + "</span><br>\n"
-                "<span><b>CSS engine:</b> Aurelius (Stellae " + escape_html(cssver) + ")</span><br>\n"
-                "<span><b>Shell:</b> " + escape_html(shell_name) + " " + escape_html(shell_ver) + "</span><br>\n"
-                "<span><b>Network:</b> WinHTTP, TLS 1.2 and 1.3, system certificate store</span><br>\n"
-                "<span><b>Origin:</b> ported from the Python Callisto 27.2.4 engine to C and C++</span><br>\n"
-                "<hr>\n"
-                "<span><b>User-Agent</b></span><br>\n"
-                "<p>" + escape_html(get_ua()) + "</p>\n"
-                "<hr>\n"
-                "<a href=\"luna://demohtml\">Open the demo page (luna://demohtml)</a><br>\n"
-                "<a href=\"" + escape_html(home_url) + "\">Open the home page</a>\n";
-            return true;
+bool LunaEngine::is_redirect(int s) { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308; }
+
+/* Luna 1.16 core: manual redirects, security warning signal, download detection */
+Fetched LunaEngine::fetch(const std::string& start_url, int redirects_left, bool ignore_security,
+                          std::string& final_url) {
+    Fetched f;
+    std::string url = start_url;
+    const std::string ua_str = get_ua();
+    const bool ignore = ignore_security || settings.ignore_certs;
+    for (;;) {
+        final_url = url;
+        if (redirects_left < 0) { f.body = "<h1>Engine Error</h1><p>Too many redirects.</p>"; return f; }
+        HttpResult r = http_get(url, ua_str, ignore, settings.timeout_s * 1000, kMaxBody);
+        if (r.security_error) { f.security = true; return f; }
+        if (!r.ok) { f.body = "<h1>Engine Alert</h1><p>" + escape_html(r.error) + "</p>"; return f; }
+        if (is_redirect(r.status) && !r.location.empty()) {
+            url = urljoin(url, r.location);
+            --redirects_left;
+            continue;
         }
-        if (name == "demohtml") {
-            html = R"LUNA(<!DOCTYPE html>
-<html>
-<head>
-<title>Luna Demo</title>
-<style>
-body { background-color: #f4f4f8; }
-h1 { color: #223366; text-align: center; }
-h2, h3 { color: #36c; }
-address { color: #555555; }
-.ok { color: #008800; }
-.note { color: #aa6600; }
-.right { text-align: right; }
-#special { color: #cc0000; text-align: center; }
-</style>
-</head>
-<body>
-<h1>Luna Demo Page</h1>
-<p style="text-align: center;">Everything on this page is rendered by the Luna engine.</p>
-<hr>
-
-<h2>Headings (h2 and h3 are blue from a group selector)</h2>
-<h1>Heading 1</h1>
-<h2>Heading 2</h2>
-<h3>Heading 3</h3>
-<h4>Heading 4</h4>
-<h5>Heading 5</h5>
-<h6>Heading 6</h6>
-<hr>
-
-<h2>Text styles</h2>
-<span>This is</span> <b>bold</b> <span>and this is</span> <i>italic</i> <span>and this is</span> <b><i>both</i></b><br>
-<p>A paragraph is a block, so it starts on its own line.</p>
-<address>Address text is italic: Luna Engine, part of Tethys</address>
-<hr>
-
-<h2>CSS: class, id, inline and alignment</h2>
-<p class="ok">Class selector: green (.ok)</p>
-<p class="note">Class selector: orange (.note)</p>
-<p id="special">ID selector: red and centered (#special)</p>
-<p style="color:#36c;">Inline style with a short hex color (#36c becomes #3366cc)</p>
-<p style="color:#00f;" id="special">Inline beats id: this one is blue, centered by the id</p>
-<p class="right">Right aligned with .right</p>
-<hr>
-
-<h2>Lists</h2>
-<li>First item</li>
-<li>Second item</li>
-<li>Third item</li>
-<hr>
-
-<h2>Entities</h2>
-<p>&copy; &euro; &mdash; &lt;tag&gt; &amp; &#65; &#x42; &nbsp;(nbsp)</p>
-<hr>
-
-<h2>Links</h2>
-<a href="luna://about">About Luna (luna://about)</a><br>
-<a href="https://example.com/">example.com over HTTPS</a><br>
-<a href="http://neverssl.com/">neverssl.com over plain HTTP</a>
-<hr>
-
-<h2>Images</h2>
-<p>A PNG from a data: URI, scaled to 128 by 128 with the width and height attributes:</p>
-<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAFM0lEQVR42r3WkRYGKQBA4X2EgYWhPYNhGCyEYTgYhoPhYBgOhp1L4eBgGIZhj7G8v++ec/3T+8eff/39n/bH/wRsG/vGsSE25Iba0Btmw26cG27Db1wbYePeiBtp49nIG2Wjbrwb30bb6BtjY26sjX8DO/vOsSN25I7a0Ttmx+6cO27H71w7YefeiTtp59nJO2Wn7rw7307b6TtjZ+6s/Qc42A+OA3EgD9SBPjAH9uA8cAf+4DoIB/dBPEgHz0E+KAf14D34DtpBPxgH82AdP4BgFxwCIZACJdACI7CCU+AEXnAJguAWREESPIIsKIIqeAWfoAm6YAimYIkfQLJLDomQSImSaImRWMkpcRIvuSRBckuiJEkeSZYUSZW8kk/SJF0yJFOy5A+g2BWHQiikQim0wiis4lQ4hVdciqC4FVGRFI8iK4qiKl7Fp2iKrhiKqVjqB9DsmkMjNFKjNFpjNFZzapzGay5N0NyaqEmaR5M1RVM1r+bTNE3XDM3ULP0DGHbDYRAGaVAGbTAGazgNzuANlyEYbkM0JMNjyIZiqIbX8BmaoRuGYRqW+QEsu+WwCIu0KIu2GIu1nBZn8ZbLEiy3JVqS5bFkS7FUy2v5LM3SLcMyLcv+ACf7yXEiTuSJOtEn5sSenCfuxJ9cJ+HkPokn6eQ5ySflpJ68J99JO+kn42SerPMHcOyOwyEc0qEc2mEc1nE6nMM7Lkdw3I7oSI7HkR3FUR2v43M0R3cMx3Qs9wN4ds/hER7pUR7tMR7rOT3O4z2XJ3huT/Qkz+PJnuKpntfzeZqne4Znepb/AS72i+NCXMgLdaEvzIW9OC/chb+4LsLFfREv0sVzkS/KRb14L76LdtEvxsW8WNcPENgDR0AEZEAFdMAEbOAMuIAPXIEQuAMxkAJPIAdKoAbewBdogR4YgRlY4Qe42W+OG3Ejb9SNvjE39ua8cTf+5roJN/dNvEk3z02+KTf15r35btpNvxk382bdP0BkjxwREZERFdERE7GRM+IiPnJFQuSOxEiKPJEcKZEaeSNfpEV6ZERmZMUfILEnjoRIyIRK6IRJ2MSZcAmfuBIhcSdiIiWeRE6URE28iS/REj0xEjOx0g/wsD8cD+JBPqgH/WAe7MP54B78w/UQHu6H+JAenof8UB7qw/vwPbSH/jAe5sN6foDMnjkyIiMzKqMzJmMzZ8ZlfObKhMydiZmUeTI5UzI182a+TMv0zMjMzMo/QGEvHAVRkAVV0AVTsIWz4Aq+cBVC4S7EQio8hVwohVp4C1+hFXphFGZhlR+gsleOiqjIiqroiqnYyllxFV+5KqFyV2IlVZ5KrpRKrbyVr9IqvTIqs7LqD/Cyvxwv4kW+qBf9Yl7sy/niXvzL9RJe7pf4kl6el/xSXurL+/K9tJf+Ml7my3p/gI/94/gQH/JDfegP82E/zg/34T+uj/Bxf8SP9PF85I/yUT/ej++jffSP8TE/1vcDNPbG0RAN2VAN3TAN2zgbruEbVyM07kZspMbTyI3SqI238TVaozdGYzZW+wE6e+foiI7sqI7umI7tnB3X8Z2rEzp3J3ZS5+nkTunUztv5Oq3TO6MzO6v/AIN9cAzEQA7UQA/MwA7OgRv4wTUIg3sQB2nwDPKgDOrgHXyDNuiDMZiDNX6AyT45JmIiJ2qiJ2ZiJ+fETfzkmoTJPYmTNHkmeVImdfJOvkmb9MmYzMmaP8BiXxwLsZALtdALs7CLc+EWfnEtwuJexEVaPIu8KIu6eBffoi36YizmYi3+3/n97/oHng5njCsWWKQAAAAASUVORK5CYII=" width="128" height="128" alt="Generated test image">
-<p>The same image at its natural size, inside a link to luna://about:</p>
-<a href="luna://about"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAFM0lEQVR42r3WkRYGKQBA4X2EgYWhPYNhGCyEYTgYhoPhYBgOhp1L4eBgGIZhj7G8v++ec/3T+8eff/39n/bH/wRsG/vGsSE25Iba0Btmw26cG27Db1wbYePeiBtp49nIG2Wjbrwb30bb6BtjY26sjX8DO/vOsSN25I7a0Ttmx+6cO27H71w7YefeiTtp59nJO2Wn7rw7307b6TtjZ+6s/Qc42A+OA3EgD9SBPjAH9uA8cAf+4DoIB/dBPEgHz0E+KAf14D34DtpBPxgH82AdP4BgFxwCIZACJdACI7CCU+AEXnAJguAWREESPIIsKIIqeAWfoAm6YAimYIkfQLJLDomQSImSaImRWMkpcRIvuSRBckuiJEkeSZYUSZW8kk/SJF0yJFOy5A+g2BWHQiikQim0wiis4lQ4hVdciqC4FVGRFI8iK4qiKl7Fp2iKrhiKqVjqB9DsmkMjNFKjNFpjNFZzapzGay5N0NyaqEmaR5M1RVM1r+bTNE3XDM3ULP0DGHbDYRAGaVAGbTAGazgNzuANlyEYbkM0JMNjyIZiqIbX8BmaoRuGYRqW+QEsu+WwCIu0KIu2GIu1nBZn8ZbLEiy3JVqS5bFkS7FUy2v5LM3SLcMyLcv+ACf7yXEiTuSJOtEn5sSenCfuxJ9cJ+HkPokn6eQ5ySflpJ68J99JO+kn42SerPMHcOyOwyEc0qEc2mEc1nE6nMM7Lkdw3I7oSI7HkR3FUR2v43M0R3cMx3Qs9wN4ds/hER7pUR7tMR7rOT3O4z2XJ3huT/Qkz+PJnuKpntfzeZqne4Znepb/AS72i+NCXMgLdaEvzIW9OC/chb+4LsLFfREv0sVzkS/KRb14L76LdtEvxsW8WNcPENgDR0AEZEAFdMAEbOAMuIAPXIEQuAMxkAJPIAdKoAbewBdogR4YgRlY4Qe42W+OG3Ejb9SNvjE39ua8cTf+5roJN/dNvEk3z02+KTf15r35btpNvxk382bdP0BkjxwREZERFdERE7GRM+IiPnJFQuSOxEiKPJEcKZEaeSNfpEV6ZERmZMUfILEnjoRIyIRK6IRJ2MSZcAmfuBIhcSdiIiWeRE6URE28iS/REj0xEjOx0g/wsD8cD+JBPqgH/WAe7MP54B78w/UQHu6H+JAenof8UB7qw/vwPbSH/jAe5sN6foDMnjkyIiMzKqMzJmMzZ8ZlfObKhMydiZmUeTI5UzI182a+TMv0zMjMzMo/QGEvHAVRkAVV0AVTsIWz4Aq+cBVC4S7EQio8hVwohVp4C1+hFXphFGZhlR+gsleOiqjIiqroiqnYyllxFV+5KqFyV2IlVZ5KrpRKrbyVr9IqvTIqs7LqD/Cyvxwv4kW+qBf9Yl7sy/niXvzL9RJe7pf4kl6el/xSXurL+/K9tJf+Ml7my3p/gI/94/gQH/JDfegP82E/zg/34T+uj/Bxf8SP9PF85I/yUT/ej++jffSP8TE/1vcDNPbG0RAN2VAN3TAN2zgbruEbVyM07kZspMbTyI3SqI238TVaozdGYzZW+wE6e+foiI7sqI7umI7tnB3X8Z2rEzp3J3ZS5+nkTunUztv5Oq3TO6MzO6v/AIN9cAzEQA7UQA/MwA7OgRv4wTUIg3sQB2nwDPKgDOrgHXyDNuiDMZiDNX6AyT45JmIiJ2qiJ2ZiJ+fETfzkmoTJPYmTNHkmeVImdfJOvkmb9MmYzMmaP8BiXxwLsZALtdALs7CLc+EWfnEtwuJexEVaPIu8KIu6eBffoi36YizmYi3+3/n97/oHng5njCsWWKQAAAAASUVORK5CYII=" alt="Link image"></a>
-<p class="note">Images load in the background; a box with the alt text shows while loading or when loading fails.</p>
-<hr>
-
-<h2>Video</h2>
-<p>Played by the Windows media engine with the NyxPlayer controls. Needs an internet connection and an installed codec (MP4 with H.264 works on Windows 10).</p>
-<video width="480" height="270"><source src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
-</body>
-</html>
-)LUNA";
-            return true;
-        }
-        return false;
+        f.status = r.status;
+        f.ctype = r.content_type;
+        f.disp = r.content_disposition;
+        f.truncated = r.truncated;
+        f.download = r.status >= 200 && r.status < 300 && is_download(f.ctype, f.disp);
+        f.body = f.download ? r.body : sanitize_utf8(r.body);
+        return f;
     }
+}
 
-    static bool is_redirect(int s) { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308; }
+std::string LunaEngine::nexia_request(const std::string& start_url, int redirects_left, bool ignore_security,
+                                      std::string& final_url) {
+    Fetched f = fetch(start_url, redirects_left, ignore_security, final_url);
+    if (f.security) return "LUNA_SECURITY_ERROR";
+    return f.body;
+}
 
-    /* Luna 1.16 core: manual redirects, security warning signal */
-    std::string nexia_request(const std::string& start_url, int redirects_left,
-                              bool ignore_security, std::string& final_url) {
-        std::string url = start_url;
-        const std::string ua_str = get_ua();
-        for (;;) {
-            final_url = url;
-            if (redirects_left < 0) return "<h1>Engine Error</h1><p>Too many redirects.</p>";
-            HttpResult r = http_get(url, ua_str, ignore_security, 5000, 64u * 1024u * 1024u);
-            if (r.security_error) return "LUNA_SECURITY_ERROR";
-            if (!r.ok) return "<h1>Engine Alert</h1><p>" + escape_html(r.error) + "</p>";
-            if (is_redirect(r.status) && !r.location.empty()) {
-                url = urljoin(url, r.location);
-                --redirects_left;
-                continue;
-            }
-            return sanitize_utf8(r.body);
-        }
-    }
-};
+/* ---------------------------------------------------------------- page */
 
 struct LunaPage {
     LunaEngine* eng;
@@ -190,39 +104,89 @@ struct LunaPage {
             raw_source.erase(a, b + 8 - a);
         }
         parse_and_format(raw_source, base_url, aur, elements, bg_color);
+
+        /* settings: images / video switched off */
+        if (!eng->settings.images || !eng->settings.video) {
+            size_t w = 0;
+            for (size_t r = 0; r < elements.size(); ++r) {
+                const std::string& tg = elements[r].tag;
+                if ((tg == "img" && !eng->settings.images) || (tg == "video" && !eng->settings.video)) continue;
+                if (w != r) elements[w] = elements[r];
+                ++w;
+            }
+            elements.resize(w);
+        }
     }
 
-    int load(std::string url, int flags) {
+    /* history bookkeeping + show the page */
+    void commit(const std::string& final_url, const std::string& source, int flags) {
         bool save_history = (flags & LUNA_LOAD_SAVE_HISTORY) != 0;
         bool clear_forward = (flags & LUNA_LOAD_CLEAR_FORWARD) != 0;
+        if (save_history && !base_url.empty() && base_url != final_url) history.push_back(base_url);
+        if (clear_forward) forward_stack.clear();
+        apply_source(source, final_url);
+    }
+
+    int crashed(const std::string& url, const std::string& what) {
+        try {
+            apply_source(eng->crash_html(url, what), url);
+        } catch (...) {
+            elements.clear();
+            title = "Page Crashed";
+            base_url = url;
+        }
+        status(0, "");
+        return LUNA_CRASHED;
+    }
+
+    int load(const std::string& url, int flags) {
+        try { return load_impl(url, flags); }
+        catch (const std::exception& ex) { return crashed(url, ex.what()); }
+        catch (...) { return crashed(url, "Unknown error"); }
+    }
+
+    int load_impl(std::string url, int flags) {
         bool ignore_security = (flags & LUNA_LOAD_IGNORE_SECURITY) != 0;
 
         status(1, url);
 
-        /* built-in pages: luna://about, luna://demohtml */
+        /* schemes are case-insensitive: HTTP://x and Luna://about are the same as the lower case forms */
+        if (lower(url.substr(0, 8)) == "https://") url = "https://" + url.substr(8);
+        else if (lower(url.substr(0, 7)) == "http://") url = "http://" + url.substr(7);
+        else if (lower(url.substr(0, 7)) == "luna://") url = "luna://" + url.substr(7);
+
+        /* built-in pages: luna://about, settings, downloads, demohtml, crashtest */
         if (starts_with(url, "luna://")) {
-            std::string name = lower(url.substr(7));
-            size_t cut = name.find_first_of("/?#");
-            if (cut != std::string::npos) name.erase(cut);
+            std::string rest = url.substr(7);
+            size_t cut = rest.find_first_of("?#");
+            std::string head = rest.substr(0, cut);
+            std::string query;
+            if (cut != std::string::npos && rest[cut] == '?') {
+                query = rest.substr(cut + 1);
+                size_t hash = query.find('#');
+                if (hash != std::string::npos) query.erase(hash);
+            }
+            size_t slash = head.find('/');
+            if (slash != std::string::npos) head.erase(slash);
+            std::string name = lower(head);
+
             std::string html;
-            if (!eng->builtin_page(name, html))
+            if (!eng->builtin_page(name, parse_query(query), html))
                 html = "<title>Not Found</title>\n<h1>Not Found</h1>\n<p>There is no built-in page named "
                        + escape_html(name) + ".</p>\n<a href=\"luna://about\">luna://about</a>\n";
-            std::string final_url = "luna://" + name;
-            if (save_history && !base_url.empty() && base_url != final_url) history.push_back(base_url);
-            if (clear_forward) forward_stack.clear();
-            apply_source(html, final_url);
+            commit("luna://" + name, html, flags);
             status(0, "");
             return LUNA_OK;
         }
 
-        if (!starts_with(url, "http://") && !starts_with(url, "https://")) url = "http://" + url;
+        if (!starts_with(url, "http://") && !starts_with(url, "https://")) url = "http://" + trim(url);
+        url = escape_url(url);      /* "my page.html", non-ASCII paths and similar */
 
         std::string final_url;
-        std::string source = eng->nexia_request(url, 20, ignore_security, final_url);
+        Fetched f = eng->fetch(url, 20, ignore_security, final_url);
         int rc = LUNA_OK;
 
-        if (source == "LUNA_SECURITY_ERROR") {
+        if (f.security) {
             std::string html =
                 "<h1 style=\"color: #ff0000;\">Security Warning</h1>\n"
                 "<span><b>Warning!</b> The connection to " + url + " is not secure.</span><br>\n"
@@ -234,10 +198,15 @@ struct LunaPage {
             parse_and_format(raw_source, base_url, aur, elements, bg_color);
             title = "Security Warning";
             rc = LUNA_SECURITY_WARNING;
+        } else if (f.download) {
+            /* not a web page: save it and show the downloads list */
+            eng->save_download(final_url, f.body, f.ctype, f.disp, f.truncated);
+            std::string html;
+            eng->builtin_page("downloads", Query(), html);
+            commit("luna://downloads", html, flags);
+            rc = LUNA_DOWNLOAD;
         } else {
-            if (save_history && !base_url.empty() && base_url != final_url) history.push_back(base_url);
-            if (clear_forward) forward_stack.clear();
-            apply_source(source, final_url);
+            commit(final_url, f.body, flags);
         }
         status(0, "");
         return rc;
@@ -256,7 +225,9 @@ extern "C" {
 
 /* ---------------- engine ---------------- */
 
-LUNA_API LunaEngine* luna_engine_create(void) { return new (std::nothrow) LunaEngine(); }
+LUNA_API LunaEngine* luna_engine_create(void) {
+    try { return new LunaEngine(); } catch (...) { return NULL; }
+}
 LUNA_API void luna_engine_destroy(LunaEngine* e) { delete e; }
 LUNA_API const char* luna_engine_version(LunaEngine* e) { return e->version.c_str(); }
 LUNA_API const char* luna_engine_shell_version(LunaEngine* e) { return e->shell_ver.c_str(); }
@@ -275,36 +246,65 @@ LUNA_API const char* luna_engine_bookmark_url(LunaEngine* e, int i) {
 }
 LUNA_API const char* luna_engine_user_agent(LunaEngine* e) { return keep(e->ua, e->get_ua()); }
 
+LUNA_API void luna_engine_set_settings_path(LunaEngine* e, const char* path) {
+    try {
+        e->settings = Settings();
+        e->settings_path = S(path);
+        e->load_settings();
+    } catch (...) {}
+}
+
+LUNA_API void luna_engine_set_download_dir(LunaEngine* e, const char* dir) {
+    try { e->download_dir = S(dir); } catch (...) {}
+}
+
+LUNA_API int luna_download_save(LunaEngine* e, const char* url, const unsigned char* data, int len,
+                                const char* content_type, const char* content_disposition) {
+    try {
+        std::string body = (data && len > 0) ? std::string((const char*)data, (size_t)len) : std::string();
+        return e->save_download(S(url), body, S(content_type), S(content_disposition), false) ? 1 : 0;
+    } catch (...) { return 0; }
+}
+
 LUNA_API char* luna_request(LunaEngine* e, const char* url, int ignore_security, char** final_url_out) {
-    std::string final_url;
-    std::string body = e->nexia_request(S(url), 20, ignore_security != 0, final_url);
-    if (final_url_out) *final_url_out = dup_cstr(final_url);
-    return dup_cstr(body);
+    if (final_url_out) *final_url_out = NULL;
+    try {
+        std::string final_url;
+        std::string body = e->nexia_request(S(url), 20, ignore_security != 0, final_url);
+        if (final_url_out) *final_url_out = dup_cstr(final_url);
+        return dup_cstr(body);
+    } catch (...) {
+        return dup_cstr("<h1>Engine Alert</h1><p>Internal error</p>");
+    }
 }
 
 LUNA_API const unsigned char* luna_fetch_image(LunaEngine* e, const char* url_c, int* len_out) {
-    std::string url = S(url_c);
     if (len_out) *len_out = 0;
-    std::unordered_map<std::string, LunaEngine::Img>::iterator it = e->image_cache.find(url);
-    if (it == e->image_cache.end()) {
-        LunaEngine::Img img; img.ok = false;
-        /* follow redirects like the page loader */
-        std::string cur = url;
-        for (int hop = 0; hop < 10; ++hop) {
-            HttpResult r = http_get(cur, e->get_ua(), false, 5000, 32u * 1024u * 1024u);
-            if (!r.ok) break;
-            if (LunaEngine::is_redirect(r.status) && !r.location.empty()) { cur = urljoin(cur, r.location); continue; }
-            if (r.status >= 200 && r.status < 300 && !r.body.empty()) {
-                img.data.assign(r.body.begin(), r.body.end());
-                img.ok = true;
+    try {
+        std::string url = S(url_c);
+        std::unordered_map<std::string, LunaEngine::Img>::iterator it = e->image_cache.find(url);
+        if (it == e->image_cache.end()) {
+            LunaEngine::Img img; img.ok = false;
+            /* follow redirects like the page loader */
+            std::string cur = url;
+            for (int hop = 0; hop < 10; ++hop) {
+                HttpResult r = http_get(cur, e->get_ua(), false, 5000, 32u * 1024u * 1024u);
+                if (!r.ok) break;
+                if (LunaEngine::is_redirect(r.status) && !r.location.empty()) { cur = urljoin(cur, r.location); continue; }
+                if (r.status >= 200 && r.status < 300 && !r.body.empty()) {
+                    img.data.assign(r.body.begin(), r.body.end());
+                    img.ok = true;
+                }
+                break;
             }
-            break;
+            it = e->image_cache.insert(std::make_pair(url, img)).first;
         }
-        it = e->image_cache.insert(std::make_pair(url, img)).first;
+        if (!it->second.ok) return NULL;
+        if (len_out) *len_out = (int)it->second.data.size();
+        return &it->second.data[0];
+    } catch (...) {
+        return NULL;
     }
-    if (!it->second.ok) return NULL;
-    if (len_out) *len_out = (int)it->second.data.size();
-    return &it->second.data[0];
 }
 
 LUNA_API void luna_engine_clear_image_cache(LunaEngine* e) { e->image_cache.clear(); }
@@ -312,7 +312,9 @@ LUNA_API void luna_free(void* p) { std::free(p); }
 
 /* ---------------- page ---------------- */
 
-LUNA_API LunaPage* luna_page_create(LunaEngine* e) { return new (std::nothrow) LunaPage(e); }
+LUNA_API LunaPage* luna_page_create(LunaEngine* e) {
+    try { return new LunaPage(e); } catch (...) { return NULL; }
+}
 LUNA_API void luna_page_destroy(LunaPage* p) { delete p; }
 LUNA_API void luna_page_set_status_callback(LunaPage* p, LunaStatusCallback cb, void* user) {
     p->cb = cb; p->cb_user = user;
@@ -321,7 +323,8 @@ LUNA_API void luna_page_set_status_callback(LunaPage* p, LunaStatusCallback cb, 
 LUNA_API int luna_page_load(LunaPage* p, const char* url, int flags) { return p->load(S(url), flags); }
 
 LUNA_API void luna_page_set_html(LunaPage* p, const char* base_url, const char* html) {
-    p->apply_source(sanitize_utf8(S(html)), S(base_url));
+    try { p->apply_source(sanitize_utf8(S(html)), S(base_url)); }
+    catch (...) { p->elements.clear(); }
 }
 
 LUNA_API const char* luna_page_title(LunaPage* p) { return p->title.c_str(); }
@@ -352,11 +355,19 @@ LUNA_API int luna_page_refresh(LunaPage* p) {
 }
 
 LUNA_API int luna_page_click_link(LunaPage* p, const char* href_c) {
-    std::string href = S(href_c);
+    std::string href = trim(S(href_c));
+    /* empty href and same-page anchors (#top) do not reload the page; the shell scrolls instead */
+    if (href.empty() || href[0] == '#') return LUNA_OK;
+
     const std::string proceed = "luna://proceed?url=";
     if (starts_with(href, proceed.c_str()))
         return p->load(href.substr(proceed.size()), LUNA_LOAD_DEFAULT | LUNA_LOAD_IGNORE_SECURITY);
-    return p->load(urljoin(p->base_url, href), LUNA_LOAD_DEFAULT);
+
+    std::string target = urljoin(p->base_url, href);
+    std::string head = lower(target.substr(0, 8));
+    bool navigable = starts_with(head, "http://") || starts_with(head, "https://") || starts_with(head, "luna://");
+    if (!navigable) return LUNA_OK;          /* javascript:, mailto:, tel:, data: ... are not pages */
+    return p->load(target, LUNA_LOAD_DEFAULT);
 }
 
 LUNA_API const char* luna_page_resolve_url(LunaPage* p, const char* rel) {

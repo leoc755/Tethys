@@ -1,4 +1,6 @@
 #include "luna_internal.hpp"
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 
 namespace luna {
@@ -59,6 +61,35 @@ std::string escape_html(const std::string& s) {
         }
     }
     return r;
+}
+
+std::string url_decode(const std::string& s, bool plus_as_space) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        if (c == '%' && i + 2 < s.size() + 1 && std::isxdigit((unsigned char)s[i + 1]) && std::isxdigit((unsigned char)s[i + 2])) {
+            out += (char)std::strtol(s.substr(i + 1, 2).c_str(), NULL, 16);
+            i += 2;
+        } else if (c == '+' && plus_as_space) out += ' ';
+        else out += c;
+    }
+    return out;
+}
+
+std::string escape_url(const std::string& u) {
+    static const char hex[] = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(u.size());
+    for (size_t i = 0; i < u.size(); ++i) {
+        unsigned char c = (unsigned char)u[i];
+        if (c == '\t' || c == '\r' || c == '\n') continue;      /* browsers drop these inside URLs */
+        if (c <= 0x20 || c >= 0x7F || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' ||
+            c == '`' || c == '{' || c == '|' || c == '}') {
+            out += '%'; out += hex[c >> 4]; out += hex[c & 15];
+        } else out += (char)c;
+    }
+    return out;
 }
 
 /* ---------------- URL join (urllib.parse.urljoin subset) ---------------- */
