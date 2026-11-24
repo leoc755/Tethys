@@ -415,6 +415,41 @@ LUNA_API const char* luna_page_style_report(LunaPage* p) {
     return keep(p->report, r);
 }
 
+LUNA_API const char* luna_page_element_inspect(LunaPage* p, int index) {
+    if (index < 0 || (size_t)index >= p->elements.size()) return keep(p->scratch, "No element selected.\n");
+    Element& el = p->elements[(size_t)index];
+
+    std::string r = "<" + el.tag;
+    if (!el.id.empty()) r += " id=\"" + el.id + "\"";
+    if (!el.classes.empty()) {
+        r += " class=\"";
+        for (size_t i = 0; i < el.classes.size(); ++i) { if (i) r += ' '; r += el.classes[i]; }
+        r += "\"";
+    }
+    r += ">\n";
+    if (el.is_text) {
+        std::string t = el.text.size() > 160 ? el.text.substr(0, 160) + "..." : el.text;
+        r += "Text: \"" + t + "\" (" + std::to_string(el.text.size()) + " bytes)\n";
+    } else if (el.tag == "img" && !el.text.empty()) {
+        r += "Alt: \"" + el.text + "\"\n";
+    }
+    if (!el.url.empty()) r += std::string(el.tag == "img" || el.tag == "video" ? "Source: " : "Link: ") + el.url + "\n";
+    if (!el.link.empty()) r += "Link: " + el.link + "\n";
+    if (el.width || el.height) r += "Size attributes: " + std::to_string(el.width) + " x " + std::to_string(el.height) + "\n";
+    if (el.bold || el.italic) r += std::string("Text style:") + (el.bold ? " bold" : "") + (el.italic ? " italic" : "") + "\n";
+
+    r += "\nMatched rules (lowest priority first):\n";
+    r += p->aur.inspect(el.tag, el.classes, el.id, &el.css);
+
+    r += "\nComputed:\n";
+    static const char* props[] = { "color", "text-align", "font-family", "background-color", "width", "height" };
+    for (size_t i = 0; i < sizeof(props) / sizeof(props[0]); ++i)
+        r += std::string("  ") + props[i] + ": " + p->aur.get_prop(el.tag, el.classes, el.id, props[i], &el.css) + "\n";
+
+    r += "\nPage: " + p->base_url + "\n";
+    return keep(p->scratch, r);
+}
+
 LUNA_API void luna_tag_info(const char* tag_c, int* pt, int* bold, int* italic, int* is_block, int* is_inline) {
     std::string t = S(tag_c);
     int sz = 12, b = 0, it = 0;

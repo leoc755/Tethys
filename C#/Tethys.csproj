@@ -86,6 +86,13 @@
     <Compile Include="NyxPlayer.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="LunaCanvas.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="LunaCanvas.Input.cs">
+      <DependentUpon>LunaCanvas.cs</DependentUpon>
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="LunaView.cs">
       <SubType>Component</SubType>
     </Compile>

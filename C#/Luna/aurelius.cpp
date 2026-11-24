@@ -129,4 +129,33 @@ std::string Aurelius::get_prop(const std::string& tag, const std::vector<std::st
     return "undefined";
 }
 
+static std::string join_props(const PropMap& props) {
+    std::string s;
+    for (size_t i = 0; i < props.size(); ++i) {
+        if (i) s += "; ";
+        s += props[i].first + ": " + props[i].second;
+    }
+    return s;
+}
+
+std::string Aurelius::inspect(const std::string& tag, const std::vector<std::string>& classes,
+                              const std::string& element_id, const PropMap* inline_styles) const {
+    std::vector<std::string> sels;
+    sels.push_back("*");
+    if (lower(tag) != "body") sels.push_back("body");
+    sels.push_back(lower(tag));
+    for (size_t i = 0; i < classes.size(); ++i) sels.push_back("." + lower(classes[i]));
+    if (!element_id.empty()) sels.push_back("#" + lower(element_id));
+
+    std::string out;
+    for (size_t i = 0; i < sels.size(); ++i) {
+        std::unordered_map<std::string, size_t>::const_iterator it = index_.find(sels[i]);
+        if (it == index_.end() || rules_[it->second].props.empty()) continue;
+        out += "  " + sels[i] + " { " + join_props(rules_[it->second].props) + " }\n";
+    }
+    if (inline_styles && !inline_styles->empty()) out += "  element.style { " + join_props(*inline_styles) + " }\n";
+    if (out.empty()) out = "  (none)\n";
+    return out;
+}
+
 } // namespace luna

@@ -132,6 +132,12 @@ static std::string strip_blocks(const std::string& h) {
 
 struct Token { bool is_tag; std::string s; };
 
+/* inner text of a "</video>" tag token */
+static bool is_video_close(const std::string& inner) {
+    if (inner.size() < 6 || find_ci(inner, "/video") != 0) return false;
+    return inner.size() == 6 || sp(inner[6]);
+}
+
 static size_t find_tag_end(const std::string& h, size_t from, bool quotes) {
     char q = 0;
     for (size_t j = from; j < h.size(); ++j) {
@@ -196,9 +202,11 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
     bool is_bold = false, is_italic = false;
     PropMap inline_css;
     int last_video = -1;
+    bool in_video = false;   /* inside <video>...</video>: the fallback content is not drawn, NyxPlayer plays the video */
 
     for (size_t ti = 0; ti < toks.size(); ++ti) {
         if (!toks[ti].is_tag) {
+            if (in_video) continue;
             std::string t = trim(toks[ti].s);
             if (t.empty()) continue;
             Element el;
@@ -217,6 +225,19 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
         if (tag_name.size() > 1 && tag_name[0] != '/' && tag_name[tag_name.size() - 1] == '/')
             tag_name.erase(tag_name.size() - 1);
         std::vector<Attr> attrs = parse_attrs(inner.substr(ws));
+
+        if (in_video) {
+            if (tag_name == "/video") in_video = false;      /* then handled below like any closing tag */
+            else {
+                /* fallback text, images and links inside <video> are skipped; only <source> matters */
+                if (tag_name == "source") {
+                    std::string src = attr_url(get_attr(attrs, "src"));
+                    if (last_video >= 0 && elements[(size_t)last_video].url.empty() && !src.empty())
+                        elements[(size_t)last_video].url = urljoin(base_url, src);
+                }
+                continue;
+            }
+        }
 
         const std::string* a_id = get_attr(attrs, "id");
         const std::string* a_class = get_attr(attrs, "class");
@@ -258,6 +279,13 @@ void parse_and_format(const std::string& raw_html, const std::string& base_url,
             el.height = parse_dim(get_attr(attrs, "height"));
             elements.push_back(el);
             last_video = (int)elements.size() - 1;
+
+            /* swallow the fallback content, but only when the tag really is closed later (never eat the rest of a page) */
+            bool self_closed = !inner.empty() && inner[inner.size() - 1] == '/';
+            if (!self_closed) {
+                for (size_t k = ti + 1; k < toks.size(); ++k)
+                    if (toks[k].is_tag && is_video_close(trim(toks[k].s))) { in_video = true; break; }
+            }
         }
         else if (tag_name == "source") {
             std::string src = attr_url(get_attr(attrs, "src"));

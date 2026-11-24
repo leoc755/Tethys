@@ -71,6 +71,7 @@ namespace Tethys.Luna
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_element_prop(IntPtr p, int index,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string prop);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_style_report(IntPtr p);
+        [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_element_inspect(IntPtr p, int index);
         [DllImport(Dll, CallingConvention = CC)] public static extern void luna_tag_info(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string tag, out int pt, out int bold, out int italic, out int isBlock, out int isInline);
 
@@ -257,6 +258,9 @@ namespace Tethys.Luna
             for (int i = 0; i < n; i++) list.Add(GetElement(i));
             return list;
         }
+
+        /// <summary>Inspect element report: tag, text, link, the CSS rules that match (lowest priority first), computed values.</summary>
+        public string Inspect(int index) { return Native.Str(Native.luna_page_element_inspect(handle, index)); }
 
         /// <summary>Aurelius lookup (inline > id > class > tag > body > *); "undefined" when unset.</summary>
         public string GetProp(int index, string prop) { return Native.Str(Native.luna_page_element_prop(handle, index, prop)); }

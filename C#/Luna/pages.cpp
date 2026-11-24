@@ -300,7 +300,7 @@ address { color: #555555; }
 
 <h2>Video</h2>
 <p>Played by the Windows media engine with the NyxPlayer controls. Needs an internet connection and an installed codec (MP4 with H.264 works on Windows 10).</p>
-<video width="480" height="270"><source src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
+<video width="480" height="270"><source src="https://www.w3schools.com/html/mov_bbb.mp4">Your browser does not support the video tag.</video>
 </body>
 </html>
 )LUNA";

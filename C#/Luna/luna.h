@@ -29,7 +29,7 @@ extern "C" {
   #define LUNA_API __attribute__((visibility("default")))
 #endif
 
-#define LUNA_ENGINE_VERSION  "27.1.1"
+#define LUNA_ENGINE_VERSION  "27.2.1"
 #define LUNA_SHELL_VERSION   "27.2.4"
 #define LUNA_CSS_VERSION     "1.1"
 
@@ -138,6 +138,9 @@ LUNA_API int         luna_page_element_get(LunaPage* p, int index, LunaElement* 
  * when nothing matches (text-align falls back to "left", font-family to "Roboto"). */
 LUNA_API const char* luna_page_element_prop(LunaPage* p, int index, const char* prop);
 LUNA_API const char* luna_page_style_report(LunaPage* p); /* the Style Stats text */
+/* Inspect element: text report for one element (tag, id, classes, text, link, the Aurelius
+ * rules that match it from lowest to highest priority, inline style, computed values). */
+LUNA_API const char* luna_page_element_inspect(LunaPage* p, int index);
 
 /* Default tag metrics from the Callisto painter. */
 LUNA_API void luna_tag_info(const char* tag, int* point_size, int* bold, int* italic,

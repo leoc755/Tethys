@@ -39,6 +39,9 @@ public:
                          const std::string& element_id, const std::string& prop,
                          const PropMap* inline_styles = NULL) const;
     const std::vector<Rule>& rules() const { return rules_; }
+    /* the rules that apply to an element, lowest priority first, one per line (for inspect element) */
+    std::string inspect(const std::string& tag, const std::vector<std::string>& classes,
+                        const std::string& element_id, const PropMap* inline_styles) const;
 
 private:
     std::vector<Rule> rules_;
