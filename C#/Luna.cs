@@ -2,6 +2,8 @@
 // Put luna.dll next to Tethys.exe. Build luna.dll with the same bitness as the C# project
 // (x86 or x64; AnyCPU with "Prefer 32-bit" runs as x86).
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -20,7 +22,7 @@ namespace Tethys.Luna
         public struct Element
         {
             public IntPtr tag, text, url, id, classes, link;
-            public int bold, italic, hasInlineStyle, isText, width, height;
+            public int bold, italic, hasInlineStyle, isText, width, height, listDepth, listMarker, listNumber, layout;
         }
 
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_engine_create();
@@ -72,6 +74,11 @@ namespace Tethys.Luna
             [MarshalAs(UnmanagedType.LPUTF8Str)] string prop);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_style_report(IntPtr p);
         [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_element_inspect(IntPtr p, int index);
+        [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_element_attr(IntPtr p, int index,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+        [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_page_element_css(IntPtr p, int index,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string prop);
+        [DllImport(Dll, CallingConvention = CC)] public static extern IntPtr luna_decode_webp(byte[] data, int len, out int width, out int height);
         [DllImport(Dll, CallingConvention = CC)] public static extern void luna_tag_info(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string tag, out int pt, out int bold, out int italic, out int isBlock, out int isInline);
 
@@ -93,6 +100,14 @@ namespace Tethys.Luna
         public string[] Classes;
         public bool Bold, Italic, HasInlineStyle, IsText;
         public int Width, Height;                  // img/video width and height attributes, 0 = not given
+        public int ListDepth;                      // nesting level of <ul>/<ol>, 0 = not in a list
+        public int ListMarker;                     // first element of a list item: 1 disc, 2 circle, 3 square, 4 number
+        public int ListNumber;                     // number to draw when ListMarker is 4
+        public int Layout;                         // LayoutNewLine / LayoutInline flags
+        public const int LayoutNewLine = 1;        // starts a new line even if its tag is inline
+        public const int LayoutInline = 2;         // continues the current line even if its tag is a block
+        public const int LayoutDisabled = 4;       // a disabled button
+        public const int LayoutContinues = 8;      // the next element continues on this line (a block tag must not end it)
         // text inside <a href> keeps the link even when it sits in a span, heading or paragraph; img/video Url is their source, not a link
         public bool IsLink { get { return IsText && Url.Length > 0; } }
     }
@@ -165,6 +180,40 @@ namespace Tethys.Luna
                 Marshal.Copy(p, b, 0, len);
                 return b;
             }
+        }
+
+        /// <summary>True when the bytes start with a WebP header (RIFF....WEBP).</summary>
+        public static bool IsWebP(byte[] d)
+        {
+            return d != null && d.Length >= 12 && d[0] == 'R' && d[1] == 'I' && d[2] == 'F' && d[3] == 'F' &&
+                   d[8] == 'W' && d[9] == 'E' && d[10] == 'B' && d[11] == 'P';
+        }
+
+        /// <summary>Decodes a WebP image (lossy, lossless, alpha; first frame of an animation) with the bundled libwebp. Null on failure.</summary>
+        public static Bitmap DecodeWebP(byte[] data)
+        {
+            if (data == null || data.Length < 12) return null;
+            int w, h;
+            IntPtr px = Native.luna_decode_webp(data, data.Length, out w, out h);
+            if (px == IntPtr.Zero) return null;
+            try
+            {
+                Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+                BitmapData bd = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    int rowBytes = w * 4;
+                    byte[] row = new byte[rowBytes];
+                    for (int y = 0; y < h; y++)
+                    {
+                        Marshal.Copy(IntPtr.Add(px, y * rowBytes), row, 0, rowBytes);
+                        Marshal.Copy(row, 0, IntPtr.Add(bd.Scan0, y * bd.Stride), rowBytes);
+                    }
+                }
+                finally { bmp.UnlockBits(bd); }
+                return bmp;
+            }
+            finally { Native.luna_free(px); }
         }
 
         public void ClearImageCache()
@@ -247,7 +296,8 @@ namespace Tethys.Luna
                 Link = Native.Str(e.link),
                 Classes = cls.Length == 0 ? new string[0] : cls.Split(' '),
                 Bold = e.bold != 0, Italic = e.italic != 0, HasInlineStyle = e.hasInlineStyle != 0, IsText = e.isText != 0,
-                Width = e.width, Height = e.height
+                Width = e.width, Height = e.height,
+                ListDepth = e.listDepth, ListMarker = e.listMarker, ListNumber = e.listNumber, Layout = e.layout
             };
         }
 
@@ -258,6 +308,12 @@ namespace Tethys.Luna
             for (int i = 0; i < n; i++) list.Add(GetElement(i));
             return list;
         }
+
+        /// <summary>Raw attribute of an element ("" if it has none): colspan, rowspan, border, cellpadding, width, align, bgcolor ...</summary>
+        public string GetAttr(int index, string name) { return Native.Str(Native.luna_page_element_attr(handle, index, name)); }
+
+        /// <summary>Like GetProp, but "" when no rule or inline style sets the property (no fallback value).</summary>
+        public string GetCss(int index, string prop) { return Native.Str(Native.luna_page_element_css(handle, index, prop)); }
 
         /// <summary>Inspect element report: tag, text, link, the CSS rules that match (lowest priority first), computed values.</summary>
         public string Inspect(int index) { return Native.Str(Native.luna_page_element_inspect(handle, index)); }

@@ -102,9 +102,9 @@ const std::string* Aurelius::lookup(const std::string& selector, const std::stri
     return find_prop(rules_[it->second].props, prop);
 }
 
-std::string Aurelius::get_prop(const std::string& tag, const std::vector<std::string>& classes,
-                               const std::string& element_id, const std::string& prop_in,
-                               const PropMap* inline_styles) const {
+std::string Aurelius::explicit_prop(const std::string& tag, const std::vector<std::string>& classes,
+                                    const std::string& element_id, const std::string& prop_in,
+                                    const PropMap* inline_styles) const {
     /* Priority: Inline (1.1) > ID > Class > Tag > Body > Universal */
     std::string prop = lower(prop_in);
     const std::string* val = NULL;
@@ -121,9 +121,18 @@ std::string Aurelius::get_prop(const std::string& tag, const std::vector<std::st
     if (!OK(val)) val = lookup(lower(tag), prop);
     if (!OK(val)) val = lookup("body", prop);
     if (!OK(val)) val = lookup("*", prop);
-    if (OK(val)) return *val;
+    std::string r = OK(val) ? *val : std::string();
 #undef OK
+    return r;
+}
 
+std::string Aurelius::get_prop(const std::string& tag, const std::vector<std::string>& classes,
+                               const std::string& element_id, const std::string& prop_in,
+                               const PropMap* inline_styles) const {
+    std::string r = explicit_prop(tag, classes, element_id, prop_in, inline_styles);
+    if (!r.empty()) return r;
+
+    std::string prop = lower(prop_in);
     if (prop == "text-align") return "left";
     if (prop == "font-family") return "Roboto";
     return "undefined";

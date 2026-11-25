@@ -23,6 +23,7 @@ namespace WindowsFormsApp1
         private string hoverUrl;
         private Rectangle lastOverlay = Rectangle.Empty;
         private Box inspected;
+        private Box hoverBtn, pressedBtn;            // buttons under the pointer / being pressed
 
         private ContextMenuStrip menu;
         private ToolStripMenuItem miCopy, miSelectAll, miCopyLink, miInspect;
@@ -72,6 +73,7 @@ namespace WindowsFormsApp1
         {
             hasSel = false; pressed = false; selecting = false; dragged = false;
             downHit = null; hoverUrl = null; lastOverlay = Rectangle.Empty; inspected = null;
+            hoverBtn = null; pressedBtn = null;
             ctxBox = null; ctxTarget = null;
         }
 
@@ -312,6 +314,14 @@ namespace WindowsFormsApp1
             downPoint = e.Location;
             downHit = FindHit(e.Location);
 
+            Box btn = ButtonAt(ToDoc(e.Location));
+            if (btn != null && !btn.Disabled)       // a button is pressed, not selected
+            {
+                SetPressed(btn);
+                downHit = FindHit(e.Location);
+                return;
+            }
+
             Pos pos;
             bool ok = PosFromPoint(ToDoc(e.Location), out pos);
             if (e.Clicks == 2 && ok) { SelectWordAt(pos); downHit = null; return; }
@@ -357,6 +367,7 @@ namespace WindowsFormsApp1
             if (e.Button != MouseButtons.Left) return;
             bool was = pressed;
             pressed = false; selecting = false;
+            SetPressed(null);
             if (!was || dragged) return;                 // a drag selects text, it does not follow links
 
             Hit h = FindHit(e.Location);
@@ -369,6 +380,7 @@ namespace WindowsFormsApp1
             base.OnMouseLeave(e);
             hoverUrl = null;
             Cursor = Cursors.Default;
+            SetHoverButton(null);
             RefreshOverlay();
         }
 
@@ -397,8 +409,42 @@ namespace WindowsFormsApp1
             mousePos = client;
             Hit h = FindHit(client);
             hoverUrl = h != null ? h.Box.Target : null;
+            SetHoverButton(ButtonAt(ToDoc(client)));
             Cursor = h != null ? Cursors.Hand : (OverText(client) ? Cursors.IBeam : Cursors.Default);
             RefreshOverlay();
+        }
+
+        // ---- buttons: hover and pressed look ----
+
+        private Box ButtonAt(PointF d)
+        {
+            foreach (Box b in boxes) if (b.Kind == 5 && b.Rect.Contains(d)) return b;
+            return null;
+        }
+
+        private void InvalidateBox(Box b)
+        {
+            if (b == null) return;
+            Rectangle r = Rectangle.Ceiling(b.Rect);
+            r.Offset(AutoScrollPosition.X, AutoScrollPosition.Y);
+            r.Inflate(2, 2);
+            Invalidate(r);
+        }
+
+        private void SetHoverButton(Box b)
+        {
+            if (b == hoverBtn) return;
+            InvalidateBox(hoverBtn);
+            hoverBtn = b;
+            InvalidateBox(hoverBtn);
+        }
+
+        private void SetPressed(Box b)
+        {
+            if (b == pressedBtn) return;
+            InvalidateBox(pressedBtn);
+            pressedBtn = b;
+            InvalidateBox(pressedBtn);
         }
 
         // ---------------------------------------------------------------- link bubble
@@ -455,7 +501,7 @@ namespace WindowsFormsApp1
             for (int i = boxes.Count - 1; i >= 0; i--)
             {
                 Box b = boxes[i];
-                if ((b.Kind == 3 || b.Kind == 4) && b.Rect.Contains(d)) return b;
+                if ((b.Kind == 3 || b.Kind == 4 || b.Kind == 5) && b.Rect.Contains(d)) return b;
             }
             foreach (Box b in boxes)
             {

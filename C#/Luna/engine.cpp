@@ -391,6 +391,8 @@ LUNA_API int luna_page_element_get(LunaPage* p, int index, LunaElement* out) {
     out->has_inline_style = !el.css.empty();
     out->is_text = el.is_text;
     out->width = el.width; out->height = el.height;
+    out->list_depth = el.list_depth; out->list_marker = el.list_marker;
+    out->list_number = el.list_number; out->layout = el.layout;
     return 1;
 }
 
@@ -415,6 +417,21 @@ LUNA_API const char* luna_page_style_report(LunaPage* p) {
     return keep(p->report, r);
 }
 
+LUNA_API const char* luna_page_element_attr(LunaPage* p, int index, const char* name) {
+    if (index < 0 || (size_t)index >= p->elements.size() || !name) return "";
+    const PropMap& m = p->elements[(size_t)index].attrs;
+    std::string n = lower(S(name));
+    for (size_t i = 0; i < m.size(); ++i)
+        if (m[i].first == n) return keep(p->scratch, m[i].second);
+    return "";
+}
+
+LUNA_API const char* luna_page_element_css(LunaPage* p, int index, const char* prop) {
+    if (index < 0 || (size_t)index >= p->elements.size()) return "";
+    Element& el = p->elements[(size_t)index];
+    return keep(p->scratch, p->aur.explicit_prop(el.tag, el.classes, el.id, S(prop), &el.css));
+}
+
 LUNA_API const char* luna_page_element_inspect(LunaPage* p, int index) {
     if (index < 0 || (size_t)index >= p->elements.size()) return keep(p->scratch, "No element selected.\n");
     Element& el = p->elements[(size_t)index];
@@ -436,6 +453,10 @@ LUNA_API const char* luna_page_element_inspect(LunaPage* p, int index) {
     if (!el.url.empty()) r += std::string(el.tag == "img" || el.tag == "video" ? "Source: " : "Link: ") + el.url + "\n";
     if (!el.link.empty()) r += "Link: " + el.link + "\n";
     if (el.width || el.height) r += "Size attributes: " + std::to_string(el.width) + " x " + std::to_string(el.height) + "\n";
+    if (!el.attrs.empty()) {
+        r += "Attributes:\n";
+        for (size_t i = 0; i < el.attrs.size(); ++i) r += "  " + el.attrs[i].first + "=\"" + el.attrs[i].second + "\"\n";
+    }
     if (el.bold || el.italic) r += std::string("Text style:") + (el.bold ? " bold" : "") + (el.italic ? " italic" : "") + "\n";
 
     r += "\nMatched rules (lowest priority first):\n";

@@ -29,7 +29,7 @@ extern "C" {
   #define LUNA_API __attribute__((visibility("default")))
 #endif
 
-#define LUNA_ENGINE_VERSION  "27.2.1"
+#define LUNA_ENGINE_VERSION  "27.3"
 #define LUNA_SHELL_VERSION   "27.2.4"
 #define LUNA_CSS_VERSION     "1.1"
 
@@ -38,6 +38,12 @@ extern "C" {
 #define LUNA_LOAD_CLEAR_FORWARD   2
 #define LUNA_LOAD_IGNORE_SECURITY 4
 #define LUNA_LOAD_DEFAULT         (LUNA_LOAD_SAVE_HISTORY | LUNA_LOAD_CLEAR_FORWARD)
+
+/* LunaElement.layout flags */
+#define LUNA_LAYOUT_NEWLINE 1     /* starts a new line even if its tag is inline (first element of a list item) */
+#define LUNA_LAYOUT_INLINE  2     /* continues the current line even if its tag is a block (text after </a> or </b>) */
+#define LUNA_LAYOUT_DISABLED 4    /* a disabled button */
+#define LUNA_LAYOUT_CONTINUES 8   /* the next element continues on this line, so a block tag must not end it ("See <a>this</a>") */
 
 /* luna_page_load return values */
 #define LUNA_OK               0
@@ -49,7 +55,8 @@ typedef struct LunaEngine LunaEngine;
 typedef struct LunaPage   LunaPage;
 
 typedef struct LunaElement {
-    const char* tag;      /* p h1..h6 li small span address a img video br hr */
+    const char* tag;      /* p h1..h6 li small span address a img video br hr button, and the table markers
+                           table tr td th caption /caption /table (is_text 0; their content follows them) */
     const char* text;     /* decoded text; for img it is the alt text; "" for br/hr/video */
     const char* url;      /* a: raw href; img/video: absolute src; else "" */
     const char* id;
@@ -61,6 +68,10 @@ typedef struct LunaElement {
     int is_text;          /* 1 for text runs, 0 for br/hr/img/video */
     int width;            /* img/video width attribute in pixels, 0 if not given */
     int height;           /* img/video height attribute in pixels, 0 if not given */
+    int list_depth;       /* nesting level of <ul>/<ol> the element is in, 0 = not in a list */
+    int list_marker;      /* on the first element of a list item: 1 disc, 2 circle, 3 square, 4 number; else 0 */
+    int list_number;      /* the number to draw when list_marker is 4 */
+    int layout;           /* LUNA_LAYOUT_* flags */
 } LunaElement;
 
 typedef void (*LunaStatusCallback)(int loading, const char* url, void* user);
@@ -105,6 +116,10 @@ LUNA_API void luna_engine_clear_image_cache(LunaEngine* e);
 
 LUNA_API void luna_free(void* p);
 
+/* Decode a WebP image (lossy, lossless, alpha; the first frame of an animation) to 32-bit BGRA,
+ * not premultiplied, top row first. Returns width*height*4 bytes (free with luna_free), or NULL. */
+LUNA_API unsigned char* luna_decode_webp(const unsigned char* data, int len, int* width, int* height);
+
 /* ---- page (BrowserTab + parse_and_format + Aurelius) ---- */
 /* luna_page_load also serves built-in pages: luna://about, settings, downloads, demohtml
  * and crashtest (unknown luna:// names give a Not Found page). They work offline and take
@@ -141,6 +156,14 @@ LUNA_API const char* luna_page_style_report(LunaPage* p); /* the Style Stats tex
 /* Inspect element: text report for one element (tag, id, classes, text, link, the Aurelius
  * rules that match it from lowest to highest priority, inline style, computed values). */
 LUNA_API const char* luna_page_element_inspect(LunaPage* p, int index);
+
+/* Raw attribute of an element ("" if it has none): colspan, rowspan, border, cellpadding, cellspacing, width,
+ * height, align, valign, bgcolor and so on. Kept for table markers and buttons. */
+LUNA_API const char* luna_page_element_attr(LunaPage* p, int index, const char* name);
+
+/* Like luna_page_element_prop, but returns "" when no stylesheet rule or inline style sets the property
+ * (no fallbacks), so the shell can tell "not set" from a default value. */
+LUNA_API const char* luna_page_element_css(LunaPage* p, int index, const char* prop);
 
 /* Default tag metrics from the Callisto painter. */
 LUNA_API void luna_tag_info(const char* tag, int* point_size, int* bold, int* italic,

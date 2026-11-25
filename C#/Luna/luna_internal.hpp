@@ -11,6 +11,8 @@ namespace luna {
 
 typedef std::vector<std::pair<std::string, std::string> > PropMap;
 
+enum { kLayoutNewline = 1, kLayoutInline = 2, kLayoutDisabled = 4, kLayoutContinues = 8 };   /* same values as LUNA_LAYOUT_* */
+
 /* ---- util.cpp ---- */
 std::string lower(const std::string& s);
 std::string trim(const std::string& s);
@@ -38,6 +40,10 @@ public:
     std::string get_prop(const std::string& tag, const std::vector<std::string>& classes,
                          const std::string& element_id, const std::string& prop,
                          const PropMap* inline_styles = NULL) const;
+    /* same lookup, "" when nothing sets the property (no fallbacks) */
+    std::string explicit_prop(const std::string& tag, const std::vector<std::string>& classes,
+                              const std::string& element_id, const std::string& prop,
+                              const PropMap* inline_styles = NULL) const;
     const std::vector<Rule>& rules() const { return rules_; }
     /* the rules that apply to an element, lowest priority first, one per line (for inspect element) */
     std::string inspect(const std::string& tag, const std::vector<std::string>& classes,
@@ -56,7 +62,10 @@ struct Element {
     bool bold, italic, is_text;
     PropMap css;
     int width, height;   /* width/height attributes of img and video, 0 = not given */
-    Element() : bold(false), italic(false), is_text(false), width(0), height(0) {}
+    int list_depth, list_marker, list_number, layout;   /* see LunaElement */
+    PropMap attrs;                                      /* raw attributes of table markers and buttons */
+    Element() : bold(false), italic(false), is_text(false), width(0), height(0),
+                list_depth(0), list_marker(0), list_number(0), layout(0) {}
 };
 
 void parse_and_format(const std::string& raw_html, const std::string& base_url,

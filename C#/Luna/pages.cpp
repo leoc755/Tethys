@@ -275,9 +275,46 @@ address { color: #555555; }
 <hr>
 
 <h2>Lists</h2>
-<li>First item</li>
-<li>Second item</li>
-<li>Third item</li>
+<ul>
+<li>Bullet one</li>
+<li>Bullet two with a <a href="luna://about">link</a> in the middle and <b>bold</b> text after it</li>
+<li>Bullet three
+<ul>
+<li>Nested bullet</li>
+<li>Another nested bullet
+<ul><li>Third level</li></ul>
+</li>
+</ul>
+</li>
+<li><a href="luna://settings">A list item that starts with a link</a></li>
+</ul>
+<p>An ordered list that starts at 3, with an item that jumps to 10:</p>
+<ol start="3">
+<li>Third</li>
+<li>Fourth</li>
+<li value="10">Tenth</li>
+<li>Eleventh</li>
+</ol>
+<hr>
+
+<h2>Tables</h2>
+<table border="1" cellpadding="4" cellspacing="0">
+<caption>A table with a border</caption>
+<tr><th>Name</th><th>Type</th><th>Version</th></tr>
+<tr><td>Luna</td><td>Engine</td><td align="right">27.3</td></tr>
+<tr><td>Aurelius</td><td>CSS engine</td><td align="right">1.1</td></tr>
+<tr><td colspan="2" align="center">This cell spans two columns</td><td>x</td></tr>
+</table>
+<p>Without a border, with cell colors and a nested table:</p>
+<table cellpadding="6">
+<tr><td style="background-color:#e8f0fe">Blue cell</td><td style="background-color:#fce8e6">Red cell</td></tr>
+<tr><td colspan="2"><table border="1"><tr><td>Nested A</td><td>Nested B</td></tr></table></td></tr>
+</table>
+<hr>
+
+<h2>Buttons</h2>
+<p>Buttons: <button>Plain button</button> <input type="button" value="Input button"> <button disabled>Disabled</button> <a href="luna://about"><button>Button inside a link</button></a></p>
+<p class="note">Buttons are drawn, and a button inside a link follows the link. Forms and scripts are not supported.</p>
 <hr>
 
 <h2>Entities</h2>
@@ -295,6 +332,8 @@ address { color: #555555; }
 <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAFM0lEQVR42r3WkRYGKQBA4X2EgYWhPYNhGCyEYTgYhoPhYBgOhp1L4eBgGIZhj7G8v++ec/3T+8eff/39n/bH/wRsG/vGsSE25Iba0Btmw26cG27Db1wbYePeiBtp49nIG2Wjbrwb30bb6BtjY26sjX8DO/vOsSN25I7a0Ttmx+6cO27H71w7YefeiTtp59nJO2Wn7rw7307b6TtjZ+6s/Qc42A+OA3EgD9SBPjAH9uA8cAf+4DoIB/dBPEgHz0E+KAf14D34DtpBPxgH82AdP4BgFxwCIZACJdACI7CCU+AEXnAJguAWREESPIIsKIIqeAWfoAm6YAimYIkfQLJLDomQSImSaImRWMkpcRIvuSRBckuiJEkeSZYUSZW8kk/SJF0yJFOy5A+g2BWHQiikQim0wiis4lQ4hVdciqC4FVGRFI8iK4qiKl7Fp2iKrhiKqVjqB9DsmkMjNFKjNFpjNFZzapzGay5N0NyaqEmaR5M1RVM1r+bTNE3XDM3ULP0DGHbDYRAGaVAGbTAGazgNzuANlyEYbkM0JMNjyIZiqIbX8BmaoRuGYRqW+QEsu+WwCIu0KIu2GIu1nBZn8ZbLEiy3JVqS5bFkS7FUy2v5LM3SLcMyLcv+ACf7yXEiTuSJOtEn5sSenCfuxJ9cJ+HkPokn6eQ5ySflpJ68J99JO+kn42SerPMHcOyOwyEc0qEc2mEc1nE6nMM7Lkdw3I7oSI7HkR3FUR2v43M0R3cMx3Qs9wN4ds/hER7pUR7tMR7rOT3O4z2XJ3huT/Qkz+PJnuKpntfzeZqne4Znepb/AS72i+NCXMgLdaEvzIW9OC/chb+4LsLFfREv0sVzkS/KRb14L76LdtEvxsW8WNcPENgDR0AEZEAFdMAEbOAMuIAPXIEQuAMxkAJPIAdKoAbewBdogR4YgRlY4Qe42W+OG3Ejb9SNvjE39ua8cTf+5roJN/dNvEk3z02+KTf15r35btpNvxk382bdP0BkjxwREZERFdERE7GRM+IiPnJFQuSOxEiKPJEcKZEaeSNfpEV6ZERmZMUfILEnjoRIyIRK6IRJ2MSZcAmfuBIhcSdiIiWeRE6URE28iS/REj0xEjOx0g/wsD8cD+JBPqgH/WAe7MP54B78w/UQHu6H+JAenof8UB7qw/vwPbSH/jAe5sN6foDMnjkyIiMzKqMzJmMzZ8ZlfObKhMydiZmUeTI5UzI182a+TMv0zMjMzMo/QGEvHAVRkAVV0AVTsIWz4Aq+cBVC4S7EQio8hVwohVp4C1+hFXphFGZhlR+gsleOiqjIiqroiqnYyllxFV+5KqFyV2IlVZ5KrpRKrbyVr9IqvTIqs7LqD/Cyvxwv4kW+qBf9Yl7sy/niXvzL9RJe7pf4kl6el/xSXurL+/K9tJf+Ml7my3p/gI/94/gQH/JDfegP82E/zg/34T+uj/Bxf8SP9PF85I/yUT/ej++jffSP8TE/1vcDNPbG0RAN2VAN3TAN2zgbruEbVyM07kZspMbTyI3SqI238TVaozdGYzZW+wE6e+foiI7sqI7umI7tnB3X8Z2rEzp3J3ZS5+nkTunUztv5Oq3TO6MzO6v/AIN9cAzEQA7UQA/MwA7OgRv4wTUIg3sQB2nwDPKgDOrgHXyDNuiDMZiDNX6AyT45JmIiJ2qiJ2ZiJ+fETfzkmoTJPYmTNHkmeVImdfJOvkmb9MmYzMmaP8BiXxwLsZALtdALs7CLc+EWfnEtwuJexEVaPIu8KIu6eBffoi36YizmYi3+3/n97/oHng5njCsWWKQAAAAASUVORK5CYII=" width="128" height="128" alt="Generated test image">
 <p>The same image at its natural size, inside a link to luna://about:</p>
 <a href="luna://about"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAFM0lEQVR42r3WkRYGKQBA4X2EgYWhPYNhGCyEYTgYhoPhYBgOhp1L4eBgGIZhj7G8v++ec/3T+8eff/39n/bH/wRsG/vGsSE25Iba0Btmw26cG27Db1wbYePeiBtp49nIG2Wjbrwb30bb6BtjY26sjX8DO/vOsSN25I7a0Ttmx+6cO27H71w7YefeiTtp59nJO2Wn7rw7307b6TtjZ+6s/Qc42A+OA3EgD9SBPjAH9uA8cAf+4DoIB/dBPEgHz0E+KAf14D34DtpBPxgH82AdP4BgFxwCIZACJdACI7CCU+AEXnAJguAWREESPIIsKIIqeAWfoAm6YAimYIkfQLJLDomQSImSaImRWMkpcRIvuSRBckuiJEkeSZYUSZW8kk/SJF0yJFOy5A+g2BWHQiikQim0wiis4lQ4hVdciqC4FVGRFI8iK4qiKl7Fp2iKrhiKqVjqB9DsmkMjNFKjNFpjNFZzapzGay5N0NyaqEmaR5M1RVM1r+bTNE3XDM3ULP0DGHbDYRAGaVAGbTAGazgNzuANlyEYbkM0JMNjyIZiqIbX8BmaoRuGYRqW+QEsu+WwCIu0KIu2GIu1nBZn8ZbLEiy3JVqS5bFkS7FUy2v5LM3SLcMyLcv+ACf7yXEiTuSJOtEn5sSenCfuxJ9cJ+HkPokn6eQ5ySflpJ68J99JO+kn42SerPMHcOyOwyEc0qEc2mEc1nE6nMM7Lkdw3I7oSI7HkR3FUR2v43M0R3cMx3Qs9wN4ds/hER7pUR7tMR7rOT3O4z2XJ3huT/Qkz+PJnuKpntfzeZqne4Znepb/AS72i+NCXMgLdaEvzIW9OC/chb+4LsLFfREv0sVzkS/KRb14L76LdtEvxsW8WNcPENgDR0AEZEAFdMAEbOAMuIAPXIEQuAMxkAJPIAdKoAbewBdogR4YgRlY4Qe42W+OG3Ejb9SNvjE39ua8cTf+5roJN/dNvEk3z02+KTf15r35btpNvxk382bdP0BkjxwREZERFdERE7GRM+IiPnJFQuSOxEiKPJEcKZEaeSNfpEV6ZERmZMUfILEnjoRIyIRK6IRJ2MSZcAmfuBIhcSdiIiWeRE6URE28iS/REj0xEjOx0g/wsD8cD+JBPqgH/WAe7MP54B78w/UQHu6H+JAenof8UB7qw/vwPbSH/jAe5sN6foDMnjkyIiMzKqMzJmMzZ8ZlfObKhMydiZmUeTI5UzI182a+TMv0zMjMzMo/QGEvHAVRkAVV0AVTsIWz4Aq+cBVC4S7EQio8hVwohVp4C1+hFXphFGZhlR+gsleOiqjIiqroiqnYyllxFV+5KqFyV2IlVZ5KrpRKrbyVr9IqvTIqs7LqD/Cyvxwv4kW+qBf9Yl7sy/niXvzL9RJe7pf4kl6el/xSXurL+/K9tJf+Ml7my3p/gI/94/gQH/JDfegP82E/zg/34T+uj/Bxf8SP9PF85I/yUT/ej++jffSP8TE/1vcDNPbG0RAN2VAN3TAN2zgbruEbVyM07kZspMbTyI3SqI238TVaozdGYzZW+wE6e+foiI7sqI7umI7tnB3X8Z2rEzp3J3ZS5+nkTunUztv5Oq3TO6MzO6v/AIN9cAzEQA7UQA/MwA7OgRv4wTUIg3sQB2nwDPKgDOrgHXyDNuiDMZiDNX6AyT45JmIiJ2qiJ2ZiJ+fETfzkmoTJPYmTNHkmeVImdfJOvkmb9MmYzMmaP8BiXxwLsZALtdALs7CLc+EWfnEtwuJexEVaPIu8KIu6eBffoi36YizmYi3+3/n97/oHng5njCsWWKQAAAAASUVORK5CYII=" alt="Link image"></a>
+<p>A WebP image, decoded by the bundled libwebp:</p>
+<img src="data:image/webp;base64,UklGRvAAAABXRUJQVlA4TOQAAAAvH8AHAM2VIaL/sQAIwn+4hgFRkLYBU/8auyOl/+EB8HDURpIkeQ8Ig2mfC3bx9W+6s6q0BBi1keTIv8NyHBKAw3vUZjYvo0iSpOTM7P4wiiI04Agh/PaKCbiuD////W/1uqu9+bdfAG9wZtNwtKmwXRTAoR/OpbNF0cYkN2ENLAqASRoAm4a4Axy6QZiBTYUhJjlkUbCoGQBs2oRJAsChD1QbDMKGSXbZVNizqKaUTWuxKAJw6B2NFZOUMclamUVVDEIFbFpmU6HOWVrUu0gsiqnmxCRNdd8+3+P4787hGL3XC/M=" width="64" height="64" alt="WebP test image">
 <p class="note">Images load in the background; a box with the alt text shows while loading or when loading fails.</p>
 <hr>
 
